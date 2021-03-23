@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+celery = "*"
+flask = "*"
+
+sqlalchemy = "*"
+psycopg2-binary = "*"
+flask-sqlalchemy = "*"
+sqlalchemy-mixins = "*"
+
+[requires]
+python_version = "3.8"
