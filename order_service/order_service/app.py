@@ -24,6 +24,8 @@ from order_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_REPLY_QUEUE
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
+from order_service.app_common.messaging.utils import success_response_task_name, \
+    failure_response_task_name
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -278,22 +280,24 @@ class CreateOrderSaga:
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
                                last_message_id=task_result.id)
 
-    def handle_verify_consumer_details_response(self, payload):
+    def handle_verify_consumer_details_response_success(self, payload):
+        logging.info(f'Consumer #{self.order.consumer_id} verification succeeded')
         logging.info(f'result = {payload}')
-        logging.info(f'Consumer #{self.order.consumer_id} verified')
 
-#
-# class BaseSagaTask(app.Task):
-#     def run(self, x, y):
-#         return x + y
-#
-#
-# add = app.tasks[_AddTask.name]
+    def handle_verify_consumer_details_response_failure(self, payload):
+        logging.info(f'Consumer #{self.order.consumer_id} verification failed')
+        logging.info(f'result = {payload}')
+
 
 # TODO: register Celery task automatically
-@create_order_saga_responses_celery_app.task(name=verify_consumer_details_message.RESPONSE_TASK_NAME)
-def handle_verify_consumer_details_task(saga_id, payload: str):
-    CreateOrderSaga(saga_id).handle_verify_consumer_details_response(payload)
+@create_order_saga_responses_celery_app.task(name=success_response_task_name(verify_consumer_details_message.TASK_NAME))
+def handle_verify_consumer_details_task_success(saga_id, payload: str):
+    CreateOrderSaga(saga_id).handle_verify_consumer_details_response_success(payload)
+
+
+@create_order_saga_responses_celery_app.task(name=failure_response_task_name(verify_consumer_details_message.TASK_NAME))
+def handle_verify_consumer_details_task_failure(saga_id, payload: str):
+    CreateOrderSaga(saga_id).handle_verify_consumer_details_response_failure(payload)
 
     #
     # def reject_order(self):

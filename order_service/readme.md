@@ -16,6 +16,11 @@ PYTHONPATH=. python order_service/app.py
 ```
 
 
+# Rub Celery worker (to listen for saga replies)
+```
+PYTHONPATH=. pipenv run celery -A order_service.app.create_order_saga_responses_celery_app worker
+```
+
 # Run API docs server 
 ```
 PYTHONPATH=. asyncapi-docs --api-module order_service.asyncapi_specification

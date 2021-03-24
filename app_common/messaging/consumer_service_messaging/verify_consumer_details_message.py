@@ -4,7 +4,6 @@ import asyncapi
 
 
 TASK_NAME = 'consumer_service.verify_consumer_details'
-RESPONSE_TASK_NAME = f'{TASK_NAME}.response'
 
 
 @dataclasses.dataclass
