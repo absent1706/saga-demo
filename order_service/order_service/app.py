@@ -3,10 +3,12 @@ import logging
 import os
 import random
 import traceback
+from collections import OrderedDict
 
 import mimesis  # for fake data generation
 from dataclasses import asdict
 
+import typing
 from celery import Celery
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from flask import Flask
@@ -137,7 +139,7 @@ def _run_saga(input_data):
 
     try:
         saga_state = CreateOrderSagaState.create(order_id=order.id)
-        CreateOrderSaga(saga_state.id).execute()
+        CreateOrderSaga(main_celery_app, saga_state.id).execute()
     except SagaError as e:
         return f'Saga failed: {e} \n . See logs for more details'
 
@@ -213,22 +215,88 @@ def run_random_saga():
 #         card_id=random.randint(1, 5)
 #     ))
 
+NO_ACTION = lambda *args: None
+
+class Step:
+    def __init__(self,
+                 name: str,
+                 action: typing.Callable = NO_ACTION,
+                 on_success: typing.Callable = NO_ACTION,
+                 on_failure: typing.Callable = NO_ACTION,
+                 compensation: typing.Callable = NO_ACTION,
+                 ):
+        self.name = name
+        self.action = action
+        self.on_success = on_success
+        self.on_failure = on_failure
+        self.compensation = compensation
+
 
 class CreateOrderSaga:
-    NO_ACTION = lambda *args: None
     _saga_state: CreateOrderSagaState = None
 
-    def __init__(self, saga_id: int):
+    def _get_next_step(self, step_name):
+        step_names = list(self.steps)
+        step_index = step_names.index(step_name)
+
+        its_last_step = (step_index == len(step_names) - 1)
+
+        if its_last_step:
+            return None
+        else:
+            next_step_index = step_index + 1
+            next_step_name = step_names[next_step_index]
+
+            return self.steps[next_step_name]
+
+    def run_step(self, step_name: str):
+        step = self.steps[step_name]
+
+        if step.action == NO_ACTION:
+            self.run_next_step_if_exists(step_name)
+        else:
+            step.action()
+
+    def run_next_step_if_exists(self, step_name: str):
+        next_step = self._get_next_step(step_name)
+        if next_step:
+            self.run_step(next_step.name)
+
+    def on_step_success(self, step_name: str):
+        saga_step = self.steps[step_name]
+        saga_step.on_success()
+
+        self.run_next_step_if_exists(step_name)
+
+    def send_message_to_other_service(self, task_name: str, queue: str, payload: dict):
+        task_result = self.celery_app.send_task(
+            task_name,
+            args=[
+                self.saga_state.id,
+                payload
+            ],
+            queue=queue
+        )
+
+        return task_result.id
+
+    def __init__(self, celery_app: Celery, saga_id: int):
+        self.celery_app = celery_app
         self.saga_id = saga_id
 
-    def execute(self):
-        # TODO: smartly determine what step to execute (based on database?)
-        self.verify_consumer_details()
-
-    @property
-    def order(self):
-        return self.saga_state.order
-
+        self.steps = OrderedDict({
+            'reject_order': Step('reject_order', compensation=self.reject_order),
+            verify_consumer_details_message.TASK_NAME: Step(
+                name=verify_consumer_details_message.TASK_NAME,
+                action=self.verify_consumer_details,
+                on_success=self.verify_consumer_details_on_success,
+                on_failure=self.verify_consumer_details_on_failure,
+            )
+        })
+        # .action(self.create_restaurant_ticket, self.reject_restaurant_ticket) \
+        # .action(self.authorize_card, self.NO_ACTION) \
+        # .action(self.approve_restaurant_ticket, self.NO_ACTION) \
+        # .action(self.approve_order, self.NO_ACTION) \
 
     @property
     def saga_state(self):
@@ -237,8 +305,14 @@ class CreateOrderSaga:
 
         return self._saga_state
 
+    @property
+    def order(self):
+        return self.saga_state.order
 
-    #
+    def execute(self):
+        # TODO: smartly determine what step to execute (based on database?)
+        self.verify_consumer_details()
+
     # def execute(self):
     #     try:
     #         logging.info(f'Starting order create saga #{self.saga_state.id}')
@@ -264,48 +338,54 @@ class CreateOrderSaga:
 
     def verify_consumer_details(self):
         logging.info(f'Verifying consumer #{self.order.consumer_id} ...')
-        task_result = main_celery_app.send_task(
+
+        message_id = self.send_message_to_other_service(
             verify_consumer_details_message.TASK_NAME,
-            args=[
-                self.saga_state.id,
-                asdict(
-                    verify_consumer_details_message.Payload(
-                        consumer_id=self.order.consumer_id
-                    )
+            consumer_service_messaging.COMMANDS_QUEUE,
+            asdict(
+                verify_consumer_details_message.Payload(
+                    consumer_id=self.order.consumer_id
                 )
-            ],
-            queue=consumer_service_messaging.COMMANDS_QUEUE
+            )
         )
 
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
-                               last_message_id=task_result.id)
+                               last_message_id=message_id)
 
-    def handle_verify_consumer_details_response_success(self, payload):
+    def verify_consumer_details_on_success(self, payload):
         logging.info(f'Consumer #{self.order.consumer_id} verification succeeded')
         logging.info(f'result = {payload}')
 
-    def handle_verify_consumer_details_response_failure(self, payload):
+         # TODO: invoke next saga step
+
+    def verify_consumer_details_on_failure(self, payload):
         logging.info(f'Consumer #{self.order.consumer_id} verification failed')
         logging.info(f'result = {payload}')
 
+    def reject_order(self):
+        self.order.update(status=OrderStatuses.REJECTED)
+        self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
 
+        logging.info(f'Compensation: order {self.order.id} rejected')
+
+
+my_task_name = verify_consumer_details_message.TASK_NAME
 # TODO: register Celery task automatically
-@create_order_saga_responses_celery_app.task(name=success_response_task_name(verify_consumer_details_message.TASK_NAME))
-def handle_verify_consumer_details_task_success(saga_id, payload: str):
-    CreateOrderSaga(saga_id).handle_verify_consumer_details_response_success(payload)
+@create_order_saga_responses_celery_app.task(name=success_response_task_name(my_task_name))
+def verify_consumer_details_on_success_handler(saga_id, payload: str):
+
+    saga = CreateOrderSaga(main_celery_app, saga_id)
+
+    saga.on_step_success(my_task_name)
+    # saga.verify_consumer_details_on_success(payload)
+
 
 
 @create_order_saga_responses_celery_app.task(name=failure_response_task_name(verify_consumer_details_message.TASK_NAME))
-def handle_verify_consumer_details_task_failure(saga_id, payload: str):
-    CreateOrderSaga(saga_id).handle_verify_consumer_details_response_failure(payload)
+def verify_consumer_details_on_failure_handler(saga_id, payload: str):
+    CreateOrderSaga(main_celery_app, saga_id).verify_consumer_details_on_failure(payload)
 
-    #
-    # def reject_order(self):
-    #     self.order.update(status=OrderStatuses.REJECTED)
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
-    #
-    #     logging.info(f'Compensation: order {self.order.id} rejected')
-    #
+
     # def create_restaurant_ticket(self):
     #     logging.info('Sending "create restaurant ticket" command ...')
     #     task_result = main_celery_app.send_task(

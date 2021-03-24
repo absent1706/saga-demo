@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 tblib = "*"
+saga-py = "*"
 
 [dev-packages]
 
