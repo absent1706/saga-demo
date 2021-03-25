@@ -26,8 +26,8 @@ from order_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_REPLY_QUEUE
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from order_service.app_common.messaging.utils import success_response_task_name, \
-    failure_response_task_name
+from order_service.app_common.messaging.utils import success_task_name, \
+    failure_task_name
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -92,8 +92,13 @@ class OrderItem(BaseModel):
     quantity = db.Column(db.Integer)
 
 
-class CreateOrderSagaState(BaseModel):
+class SagaState(BaseModel):
+    __abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
+    last_message_id = db.Column(db.String)
+
+
+class CreateOrderSagaState(SagaState):
     status = db.Column(db.Enum(CreateOrderSagaStatuses),
                        default=CreateOrderSagaStatuses.ORDER_CREATED)
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
@@ -170,19 +175,19 @@ def run_random_saga():
         price=random.randint(10, 100),
         card_id=random.randint(1, 5)
     ))
-#
-#
-# @app.route('/run-success-saga')
-# def run_success_saga():
-#     # it should succeed
-#     return _run_saga(input_data=dict(
-#         **BASE_INPUT_DATA,
-#         consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
-#         price=PRICE_THAT_WILL_SUCCEED,
-#         card_id=random.randint(1, 5)
-#     ))
-#
-#
+
+
+@app.route('/run-success-saga')
+def run_success_saga():
+    # it should succeed
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+
 # @app.route('/run-saga-failing-on-consumer-verification-because-of-incorrect-id')
 # def run_saga_failing_on_consumer_verification_incorrect_id():
 #     # it should fail on consumer verification stage
@@ -215,103 +220,167 @@ def run_random_saga():
 #         card_id=random.randint(1, 5)
 #     ))
 
+
 NO_ACTION = lambda *args: None
 
-class Step:
+from abc import ABC
+
+
+class BaseStep(ABC):
     def __init__(self,
                  name: str,
                  action: typing.Callable = NO_ACTION,
-                 on_success: typing.Callable = NO_ACTION,
-                 on_failure: typing.Callable = NO_ACTION,
                  compensation: typing.Callable = NO_ACTION,
                  ):
         self.name = name
         self.action = action
-        self.on_success = on_success
-        self.on_failure = on_failure
         self.compensation = compensation
 
 
-class CreateOrderSaga:
-    _saga_state: CreateOrderSagaState = None
+class SyncStep(BaseStep):
+    pass
 
-    def _get_next_step(self, step_name):
-        step_names = list(self.steps)
-        step_index = step_names.index(step_name)
 
-        its_last_step = (step_index == len(step_names) - 1)
+class AsyncStep(BaseStep):
+    def __init__(self,
+                 base_task_name: str,
+                 queue: str,
+                 on_success: typing.Callable = NO_ACTION,
+                 on_failure: typing.Callable = NO_ACTION,
+                 *args, **kwargs
+                 ):
+        self.base_task_name = base_task_name
+        self.queue = queue
+        self.on_success = on_success
+        self.on_failure = on_failure
 
-        if its_last_step:
-            return None
-        else:
-            next_step_index = step_index + 1
-            next_step_name = step_names[next_step_index]
+        super().__init__(*args, **kwargs)
 
-            return self.steps[next_step_name]
 
-    def run_step(self, step_name: str):
-        step = self.steps[step_name]
+class BaseSaga:
+    steps: typing.List[BaseStep] = None
+    celery_app: Celery = None
 
-        if step.action == NO_ACTION:
-            self.run_next_step_if_exists(step_name)
-        else:
-            step.action()
-
-    def run_next_step_if_exists(self, step_name: str):
-        next_step = self._get_next_step(step_name)
-        if next_step:
-            self.run_step(next_step.name)
-
-    def on_step_success(self, step_name: str):
-        saga_step = self.steps[step_name]
-        saga_step.on_success()
-
-        self.run_next_step_if_exists(step_name)
-
-    def send_message_to_other_service(self, task_name: str, queue: str, payload: dict):
-        task_result = self.celery_app.send_task(
-            task_name,
-            args=[
-                self.saga_state.id,
-                payload
-            ],
-            queue=queue
-        )
-
-        return task_result.id
+    # TODO: make it SQLAlchemy-agnostic
+    saga_id: int = None
+    saga_state_cls = None  # SQLAlchemy class
+    _saga_state = None  # cached SQLAlchemy instance
 
     def __init__(self, celery_app: Celery, saga_id: int):
         self.celery_app = celery_app
         self.saga_id = saga_id
 
-        self.steps = OrderedDict({
-            'reject_order': Step('reject_order', compensation=self.reject_order),
-            verify_consumer_details_message.TASK_NAME: Step(
-                name=verify_consumer_details_message.TASK_NAME,
+    def get_first_step(self) -> BaseStep:
+        return self.steps[0]
+
+    def get_step_by_name(self, step_name: str) -> BaseStep:
+        for step in self.steps:
+            if step.name == step_name:
+                return step
+
+        raise KeyError(f'no step found with name {step_name}')
+
+    def _get_step_index(self, step: BaseStep) -> int:
+        for i in range(len(self.steps)):
+            if self.steps[i].name == step.name:
+                return i
+
+        raise IndexError(f'step wasn\'t found')
+
+    def _get_next_step(self, step: typing.Union[BaseStep, None]) -> typing.Union[BaseStep, None]:
+        if not step:
+            return self.steps[0]
+
+        step_index = self._get_step_index(step)
+
+        its_last_step = (step_index == len(self.steps) - 1)
+
+        if its_last_step:
+            return None
+        else:
+            return self.steps[step_index + 1]
+
+    def run_step(self, step: BaseStep):
+        step.action(step)
+
+        # for sync steps, it's assumed we can run next step just after them
+        # for async ones, we will wait for on_success or on_failure
+        if isinstance(step, SyncStep):
+            self.run_next_step_if_exists(step)
+
+    def run_next_step_if_exists(self, step: BaseStep):
+        next_step = self._get_next_step(step)
+        if next_step:
+            self.run_step(next_step)
+
+    def on_step_success(self, step: AsyncStep, payload: dict):
+        step.on_success(payload)
+        self.run_next_step_if_exists(step)
+
+    def execute(self):
+        self.run_step(self.steps[0])
+
+    @property
+    def async_steps(self) -> typing.List[AsyncStep]:
+        return [step for step in self.steps if isinstance(step, AsyncStep)]
+
+    def get_async_step_by_success_task_name(self, success_task_name_: str) -> AsyncStep:
+        for step in self.async_steps:
+            if success_task_name(step.base_task_name) == success_task_name_:
+                return step
+
+        raise KeyError(f'no step found with success task name {success_task_name_}')
+
+    # TODO: move it to SQLAlchemySagaMixin, also override __init__: pass there session ID
+    @property
+    def saga_state(self):
+        if not self._saga_state:
+            self._saga_state = self.saga_state_cls.find(self.saga_id)
+
+        return self._saga_state
+
+    # TODO: maybe, move it to another place
+    def send_message_to_other_service(self, step: AsyncStep, payload: dict):
+        task_result = self.celery_app.send_task(
+            step.base_task_name,
+            args=[
+                self.saga_state.id,
+                payload
+            ],
+            queue=step.queue
+        )
+
+        return task_result.id
+
+
+class CreateOrderSaga(BaseSaga):
+    # TODO: make it abstract
+    saga_state_cls = CreateOrderSagaState
+
+    def __init__(self, celery_app: Celery, saga_id: int):
+        super().__init__(celery_app, saga_id)
+
+        self.steps = [
+            SyncStep(
+                name='reject order',
+                compensation=self.reject_order
+            ),
+            AsyncStep(
+                name='verify consumer details',
                 action=self.verify_consumer_details,
+
+                base_task_name=verify_consumer_details_message.TASK_NAME,
+                queue=consumer_service_messaging.COMMANDS_QUEUE,
+
                 on_success=self.verify_consumer_details_on_success,
                 on_failure=self.verify_consumer_details_on_failure,
             )
-        })
+
         # .action(self.create_restaurant_ticket, self.reject_restaurant_ticket) \
         # .action(self.authorize_card, self.NO_ACTION) \
         # .action(self.approve_restaurant_ticket, self.NO_ACTION) \
         # .action(self.approve_order, self.NO_ACTION) \
-
-    @property
-    def saga_state(self):
-        if not self._saga_state:
-            self._saga_state = CreateOrderSagaState.find(self.saga_id)
-
-        return self._saga_state
-
-    @property
-    def order(self):
-        return self.saga_state.order
-
-    def execute(self):
-        # TODO: smartly determine what step to execute (based on database?)
-        self.verify_consumer_details()
+    ]
 
     # def execute(self):
     #     try:
@@ -336,15 +405,14 @@ class CreateOrderSaga:
     #         # in real world, we would also report this error somewhere
     #         raise
 
-    def verify_consumer_details(self):
-        logging.info(f'Verifying consumer #{self.order.consumer_id} ...')
+    def verify_consumer_details(self, step: AsyncStep):
+        logging.info(f'Verifying consumer #{self.saga_state.order.consumer_id} ...')
 
         message_id = self.send_message_to_other_service(
-            verify_consumer_details_message.TASK_NAME,
-            consumer_service_messaging.COMMANDS_QUEUE,
+            step,
             asdict(
                 verify_consumer_details_message.Payload(
-                    consumer_id=self.order.consumer_id
+                    consumer_id=self.saga_state.order.consumer_id
                 )
             )
         )
@@ -353,35 +421,37 @@ class CreateOrderSaga:
                                last_message_id=message_id)
 
     def verify_consumer_details_on_success(self, payload):
-        logging.info(f'Consumer #{self.order.consumer_id} verification succeeded')
+        logging.info(f'Consumer #{self.saga_state.order.consumer_id} verification succeeded')
         logging.info(f'result = {payload}')
 
          # TODO: invoke next saga step
 
     def verify_consumer_details_on_failure(self, payload):
-        logging.info(f'Consumer #{self.order.consumer_id} verification failed')
+        logging.info(f'Consumer #{self.saga_state.order.consumer_id} verification failed')
         logging.info(f'result = {payload}')
 
     def reject_order(self):
-        self.order.update(status=OrderStatuses.REJECTED)
+        self.saga_state.order.update(status=OrderStatuses.REJECTED)
         self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
 
-        logging.info(f'Compensation: order {self.order.id} rejected')
+        logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 
 
-my_task_name = verify_consumer_details_message.TASK_NAME
+saga_ = CreateOrderSaga(main_celery_app, 123456789)
+step_ = saga_.async_steps[0]
+
+
 # TODO: register Celery task automatically
-@create_order_saga_responses_celery_app.task(name=success_response_task_name(my_task_name))
-def verify_consumer_details_on_success_handler(saga_id, payload: str):
+@saga_.celery_app.task(name=success_task_name(step_.base_task_name), bind=True)
+def verify_consumer_details_on_success_handler(self, saga_id, payload: dict):
+    initialized_saga = CreateOrderSaga(main_celery_app, saga_id)
 
-    saga = CreateOrderSaga(main_celery_app, saga_id)
-
-    saga.on_step_success(my_task_name)
-    # saga.verify_consumer_details_on_success(payload)
-
+    step = initialized_saga.get_async_step_by_success_task_name(self.name)
+    initialized_saga.on_step_success(step, payload)
 
 
-@create_order_saga_responses_celery_app.task(name=failure_response_task_name(verify_consumer_details_message.TASK_NAME))
+
+@create_order_saga_responses_celery_app.task(name=failure_task_name(verify_consumer_details_message.TASK_NAME))
 def verify_consumer_details_on_failure_handler(saga_id, payload: str):
     CreateOrderSaga(main_celery_app, saga_id).verify_consumer_details_on_failure(payload)
 
@@ -479,4 +549,4 @@ def verify_consumer_details_on_failure_handler(saga_id, payload: str):
 
 
 if __name__ == '__main__':
-    result = run_random_saga()
+    result = run_success_saga()

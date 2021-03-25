@@ -12,7 +12,7 @@ from consumer_service.app_common.messaging.consumer_service_messaging import \
 from consumer_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_REPLY_QUEUE
 from consumer_service.app_common.messaging.utils import \
-    success_response_task_name, failure_response_task_name
+    success_task_name, failure_task_name
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -59,21 +59,18 @@ def verify_consumer_details_task(saga_id: int, payload: dict):
         if payload.consumer_id < 50:
             raise ValueError(f'Consumer has incorrect id = {payload.consumer_id}')
 
-        payload = None
-
-        send_saga_response(command_handlers_celery_app,
-                           success_response_task_name(verify_consumer_details_message.TASK_NAME),
-                           CREATE_ORDER_SAGA_REPLY_QUEUE,
-                           saga_id,
-                           payload)
+        payload = None  # nothing to return
+        task_name = success_task_name(verify_consumer_details_message.TASK_NAME)
     except Exception as exc:
         logging.exception(exc)
+        payload = serialize_saga_error(exc)
+        task_name = failure_task_name(verify_consumer_details_message.TASK_NAME)
 
-        send_saga_response(command_handlers_celery_app,
-                           failure_response_task_name(verify_consumer_details_message.TASK_NAME),
-                           CREATE_ORDER_SAGA_REPLY_QUEUE,
-                           saga_id,
-                           payload=serialize_saga_error(exc))
+    send_saga_response(command_handlers_celery_app,
+                       task_name,
+                       CREATE_ORDER_SAGA_REPLY_QUEUE,
+                       saga_id,
+                       payload)
 
     # TODO: maybe: for failures, use another task name => status not needed
 
