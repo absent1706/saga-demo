@@ -1,17 +1,12 @@
 import logging
-import random
-import time
-from dataclasses import asdict
-
 from celery import Celery
-import celery
 
 from consumer_service.app_common import settings
 from consumer_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from consumer_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_REPLY_QUEUE
-from consumer_service.app_common.messaging.utils import \
+from consumer_service.app_common.sagas_framework.utils import \
     success_task_name, failure_task_name
 
 logging.basicConfig(level=logging.DEBUG)
@@ -71,8 +66,6 @@ def verify_consumer_details_task(saga_id: int, payload: dict):
                        CREATE_ORDER_SAGA_REPLY_QUEUE,
                        saga_id,
                        payload)
-
-    # TODO: maybe: for failures, use another task name => status not needed
 
 
 
