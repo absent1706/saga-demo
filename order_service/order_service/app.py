@@ -19,7 +19,8 @@ from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging, restaurant_service_messaging
-from order_service.app_common.sagas_framework import BaseSaga, SyncStep, AsyncStep
+from order_service.app_common.sagas_framework import BaseSaga, SyncStep, \
+    AsyncStep, BaseStep
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -256,15 +257,15 @@ class CreateOrderSaga(SqlAlchemySaga):
         self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
                                last_message_id=message_id)
 
-    def verify_consumer_details_on_success(self, payload):
+    def verify_consumer_details_on_success(self, step: BaseStep, payload: dict):
         logging.info(f'Consumer #{self.saga_state.order.consumer_id} verification succeeded')
         logging.info(f'result = {payload}')
 
-    def verify_consumer_details_on_failure(self, payload):
+    def verify_consumer_details_on_failure(self, step: BaseStep, payload: dict):
         logging.info(f'Consumer #{self.saga_state.order.consumer_id} verification failed')
         logging.info(f'result = {payload}')
 
-    def reject_order(self, step):
+    def reject_order(self, step: BaseStep):
         self.saga_state.order.update(status=OrderStatuses.REJECTED)
         logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 

@@ -116,11 +116,11 @@ class BaseSaga:
             self.on_saga_failure(initial_failure_payload)
 
     def on_step_success(self, step: AsyncStep, payload: dict):
-        step.on_success(payload)
+        step.on_success(step, payload)
         self.run_next_step_if_exists(step)
 
     def on_step_failure(self, step: AsyncStep, payload: dict):
-        step.on_failure(payload)
+        step.on_failure(step, payload)
         self.compensate_previous_step_if_exists(step, payload)
 
     def execute(self):
