@@ -269,17 +269,6 @@ class CreateOrderSaga(SqlAlchemySaga):
         self.saga_state.order.update(status=OrderStatuses.REJECTED)
         logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 
-    def on_saga_success(self):
-        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED)
-
-        logging.info(f'Saga {self.saga_id} succeeded')
-
-    def on_saga_failure(self, initial_failure_payload: dict):
-        self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
-
-        logging.info(f'Saga {self.saga_id} failed. \n'
-                     f'Initial failure details: {initial_failure_payload}')
-
     # def create_restaurant_ticket(self):
     #     logging.info('Sending "create restaurant ticket" command ...')
     #     task_result = main_celery_app.send_task(
@@ -309,7 +298,7 @@ class CreateOrderSaga(SqlAlchemySaga):
     #     response = create_ticket_message.Response(**task_result.get(timeout=self.TIMEOUT))
     #     logging.info(f'Restaurant ticket # {response.ticket_id} created')
     #     self.order.update(restaurant_ticket_id=response.ticket_id)
-    #
+
     # def reject_restaurant_ticket(self):
     #     logging.info(f'Compensation: rejecting restaurant ticket #{self.order.restaurant_ticket_id} ...')
     #     task_result = main_celery_app.send_task(
@@ -370,6 +359,17 @@ class CreateOrderSaga(SqlAlchemySaga):
     #     self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
     #
     #     logging.info(f'Order {self.order.id} approved')
+
+    def on_saga_success(self):
+        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED)
+
+        logging.info(f'Saga {self.saga_id} succeeded')
+
+    def on_saga_failure(self, initial_failure_payload: dict):
+        self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
+
+        logging.info(f'Saga {self.saga_id} failed. \n'
+                     f'Initial failure details: {initial_failure_payload}')
 
 
 if __name__ == '__main__':
