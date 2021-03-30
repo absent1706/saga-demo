@@ -1,3 +1,4 @@
+import abc
 import enum
 import logging
 import os
@@ -10,6 +11,7 @@ from dataclasses import asdict
 from celery import Celery
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import Session
 from sqlalchemy_mixins import AllFeaturesMixin
 
 from order_service.app_common import settings
@@ -19,8 +21,10 @@ from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging, restaurant_service_messaging
+from order_service.app_common.messaging.restaurant_service_messaging import \
+    create_ticket_message
 from order_service.app_common.sagas_framework import BaseSaga, SyncStep, \
-    AsyncStep, BaseStep
+    AsyncStep, BaseStep, AbstractSagaStateRepository, StatefulSaga
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -29,8 +33,7 @@ main_celery_app = Celery('my_celery_app', broker=settings.CELERY_BROKER)
 app = Flask(__name__)
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
-app.config[
-    'SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.sqlite"
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{current_dir}/order_service.sqlite"
 
 db = SQLAlchemy(app, session_options={'autocommit': True})
 
@@ -67,24 +70,11 @@ class OrderItem(BaseModel):
     quantity = db.Column(db.Integer)
 
 
-class CreateOrderSagaStatuses(enum.Enum):
-    ORDER_CREATED = 'ORDER_CREATED'
-    VERIFYING_CONSUMER_DETAILS = 'VERIFYING_CONSUMER_DETAILS'
-    CREATING_RESTAURANT_TICKET = 'CREATING_RESTAURANT_TICKET'
-    APPROVING_RESTAURANT_TICKET = 'APPROVING_RESTAURANT_TICKET'
-    AUTHORIZING_CREDIT_CARD = 'AUTHORIZING_CREDIT_CARD'
-    SUCCEEDED = 'SUCCEEDED'
-
-    REJECTING_RESTAURANT_TICKET = 'REJECTING_RESTAURANT_TICKET'
-    FAILED = 'FAILED'
-
-
 class CreateOrderSagaState(BaseModel):
     id = db.Column(db.Integer, primary_key=True)
     last_message_id = db.Column(db.String)
 
-    status = db.Column(db.Enum(CreateOrderSagaStatuses),
-                       default=CreateOrderSagaStatuses.ORDER_CREATED)
+    status = db.Column(db.String, default='not_started')
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
     order = db.relationship("Order")
 
@@ -123,7 +113,6 @@ PRICE_THAT_WILL_FAIL = 80
 
 def _run_saga(input_data):
     order = Order.create(**input_data)
-
     saga_state = CreateOrderSagaState.create(order_id=order.id)
     CreateOrderSaga(main_celery_app, saga_state.id).execute()
 
@@ -197,28 +186,22 @@ def run_success_saga():
 #         card_id=random.randint(1, 5)
 #     ))
 
+class CreateOrderSagaRepository(AbstractSagaStateRepository):
+    def get_saga_state_by_id(self, saga_id: int) -> CreateOrderSagaState:
+        return CreateOrderSagaState.find(saga_id)
 
-class SqlAlchemySaga(BaseSaga):
-    """
-    Note this class assumes sqlalchemy-mixins library is used.
-    Use it rather as an example
-    """
-    saga_state_cls = None  # SQLAlchemy class (must use sqlalchemy-mixins)
-    _saga_state = None  # cached SQLAlchemy instance
+    def update_status(self, saga_id: int, status: str) -> CreateOrderSagaState:
+        return self.get_saga_state_by_id(saga_id).update(status=status)
 
-    @property
-    def saga_state(self):
-        if not self._saga_state:
-            self._saga_state = self.saga_state_cls.find(self.saga_id)
-
-        return self._saga_state
+    def update(self, saga_id: int, **fields_to_update: str) -> object:
+        return self.get_saga_state_by_id(saga_id).update(**fields_to_update)
 
 
-class CreateOrderSaga(SqlAlchemySaga):
-    saga_state_cls = CreateOrderSagaState
+class CreateOrderSaga(StatefulSaga):
+    saga_state_repository = CreateOrderSagaRepository()
 
-    def __init__(self, celery_app: Celery, saga_id: int):
-        super().__init__(celery_app, saga_id)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.steps = [
             SyncStep(
@@ -254,8 +237,7 @@ class CreateOrderSaga(SqlAlchemySaga):
             )
         )
 
-        self.saga_state.update(status=CreateOrderSagaStatuses.VERIFYING_CONSUMER_DETAILS,
-                               last_message_id=message_id)
+        self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
 
     def verify_consumer_details_on_success(self, step: BaseStep, payload: dict):
         logging.info(f'Consumer #{self.saga_state.order.consumer_id} verification succeeded')
@@ -269,33 +251,29 @@ class CreateOrderSaga(SqlAlchemySaga):
         self.saga_state.order.update(status=OrderStatuses.REJECTED)
         logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 
-    # def create_restaurant_ticket(self):
+    # def create_restaurant_ticket(self, step: AsyncStep):
     #     logging.info('Sending "create restaurant ticket" command ...')
-    #     task_result = main_celery_app.send_task(
-    #         create_ticket_message.TASK_NAME,
-    #         args=[asdict(
+    #
+    #     message_id = self.send_message_to_other_service(
+    #         step,
+    #         asdict(
     #             create_ticket_message.Payload(
-    #                 order_id=self.order.id,
-    #                 customer_id=self.order.consumer_id,
+    #                 order_id=self.saga_state.order.id,
+    #                 customer_id=self.saga_state.order.consumer_id,
     #                 items=[
     #                     create_ticket_message.OrderItem(
     #                         name=item.name,
     #                         quantity=item.quantity
     #                     )
-    #                     for item in self.order.items
+    #                     for item in self.saga_state.order.items
     #                 ]
     #             )
-    #         )],
-    #         queue=restaurant_service_messaging.COMMANDS_QUEUE)
+    #         )
+    #     )
     #
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
-    #                            last_message_id=task_result.id)
+    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
+    #                            last_message_id=message_id)
     #
-    #     # It's safe to assume success case.
-    #     # In case task handler throws exception,
-    #     #   Celery automatically raises exception here by itself,
-    #     #   and saga library automatically launches compensations
-    #     response = create_ticket_message.Response(**task_result.get(timeout=self.TIMEOUT))
     #     logging.info(f'Restaurant ticket # {response.ticket_id} created')
     #     self.order.update(restaurant_ticket_id=response.ticket_id)
 
@@ -310,7 +288,7 @@ class CreateOrderSaga(SqlAlchemySaga):
     #         )],
     #         queue=restaurant_service_messaging.COMMANDS_QUEUE)
     #
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
+    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
     #                            last_message_id=task_result.id)
     #
     #     task_result.get(timeout=self.TIMEOUT)
@@ -327,7 +305,7 @@ class CreateOrderSaga(SqlAlchemySaga):
     #         )],
     #         queue=restaurant_service_messaging.COMMANDS_QUEUE)
     #
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.APPROVING_RESTAURANT_TICKET,
+    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.APPROVING_RESTAURANT_TICKET,
     #                            last_message_id=task_result.id)
     #
     #     task_result.get(timeout=self.TIMEOUT)
@@ -343,7 +321,7 @@ class CreateOrderSaga(SqlAlchemySaga):
     #         )],
     #         queue=accounting_service_messaging.COMMANDS_QUEUE)
     #
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
+    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
     #                            last_message_id=task_result.id)
     #
     #     # It's safe to assume success case.
@@ -356,20 +334,9 @@ class CreateOrderSaga(SqlAlchemySaga):
     #
     # def approve_order(self):
     #     self.order.update(status=OrderStatuses.APPROVED)
-    #     self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
+    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
     #
     #     logging.info(f'Order {self.order.id} approved')
-
-    def on_saga_success(self):
-        self.saga_state.update(status=CreateOrderSagaStatuses.SUCCEEDED)
-
-        logging.info(f'Saga {self.saga_id} succeeded')
-
-    def on_saga_failure(self, initial_failure_payload: dict):
-        self.saga_state.update(status=CreateOrderSagaStatuses.FAILED)
-
-        logging.info(f'Saga {self.saga_id} failed. \n'
-                     f'Initial failure details: {initial_failure_payload}')
 
 
 if __name__ == '__main__':
