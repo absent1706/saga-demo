@@ -22,7 +22,7 @@ from order_service.app_common.messaging.consumer_service_messaging import \
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging, restaurant_service_messaging
 from order_service.app_common.messaging.restaurant_service_messaging import \
-    create_ticket_message
+    create_ticket_message, reject_ticket_message
 from order_service.app_common.sagas_framework import BaseSaga, SyncStep, \
     AsyncStep, BaseStep, AbstractSagaStateRepository, StatefulSaga
 
@@ -205,31 +205,41 @@ class CreateOrderSaga(StatefulSaga):
 
         self.steps = [
             SyncStep(
-                name='reject order',
+                name='reject_order',
                 compensation=self.reject_order
             ),
             AsyncStep(
-                name='verify consumer details',
+                name='verify_consumer_details',
                 action=self.verify_consumer_details,
 
                 base_task_name=verify_consumer_details_message.TASK_NAME,
                 queue=consumer_service_messaging.COMMANDS_QUEUE,
 
                 on_success=self.verify_consumer_details_on_success,
-                on_failure=self.verify_consumer_details_on_failure,
-            )
+                on_failure=self.verify_consumer_details_on_failure
+            ),
 
-            # .action(self.create_restaurant_ticket, self.reject_restaurant_ticket) \
+            AsyncStep(
+                name='create_restaurant_ticket',
+                action=self.create_restaurant_ticket,
+                compensation=self.reject_restaurant_ticket,
+
+                base_task_name=create_ticket_message.TASK_NAME,
+                queue=restaurant_service_messaging.COMMANDS_QUEUE,
+
+                on_success=self.create_restaurant_ticket_on_success,
+                on_failure=self.create_restaurant_ticket_on_failure
+            )
             # .action(self.authorize_card, self.NO_ACTION) \
             # .action(self.approve_restaurant_ticket, self.NO_ACTION) \
             # .action(self.approve_order, self.NO_ACTION) \
         ]
 
-    def verify_consumer_details(self, step: AsyncStep):
+    def verify_consumer_details(self, current_step: AsyncStep):
         logging.info(f'Verifying consumer #{self.saga_state.order.consumer_id} ...')
 
         message_id = self.send_message_to_other_service(
-            step,
+            current_step,
             asdict(
                 verify_consumer_details_message.Payload(
                     consumer_id=self.saga_state.order.consumer_id
@@ -251,49 +261,52 @@ class CreateOrderSaga(StatefulSaga):
         self.saga_state.order.update(status=OrderStatuses.REJECTED)
         logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 
-    # def create_restaurant_ticket(self, step: AsyncStep):
-    #     logging.info('Sending "create restaurant ticket" command ...')
-    #
-    #     message_id = self.send_message_to_other_service(
-    #         step,
-    #         asdict(
-    #             create_ticket_message.Payload(
-    #                 order_id=self.saga_state.order.id,
-    #                 customer_id=self.saga_state.order.consumer_id,
-    #                 items=[
-    #                     create_ticket_message.OrderItem(
-    #                         name=item.name,
-    #                         quantity=item.quantity
-    #                     )
-    #                     for item in self.saga_state.order.items
-    #                 ]
-    #             )
-    #         )
-    #     )
-    #
-    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
-    #                            last_message_id=message_id)
-    #
-    #     logging.info(f'Restaurant ticket # {response.ticket_id} created')
-    #     self.order.update(restaurant_ticket_id=response.ticket_id)
+    def create_restaurant_ticket(self, current_step: AsyncStep):
+        logging.info(f'Creating restaurent ticket for saga {self.saga_id} ...')
 
-    # def reject_restaurant_ticket(self):
-    #     logging.info(f'Compensation: rejecting restaurant ticket #{self.order.restaurant_ticket_id} ...')
-    #     task_result = main_celery_app.send_task(
-    #         reject_ticket_message.TASK_NAME,
-    #         args=[asdict(
-    #             reject_ticket_message.Payload(
-    #                 ticket_id=self.order.restaurant_ticket_id
-    #             )
-    #         )],
-    #         queue=restaurant_service_messaging.COMMANDS_QUEUE)
-    #
-    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.REJECTING_RESTAURANT_TICKET,
-    #                            last_message_id=task_result.id)
-    #
-    #     task_result.get(timeout=self.TIMEOUT)
-    #     logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} rejected')
-    #
+        message_id = self.send_message_to_other_service(
+            current_step,
+            asdict(
+                create_ticket_message.Payload(
+                    order_id=self.saga_state.order.id,
+                    customer_id=self.saga_state.order.consumer_id,
+                    items=[
+                        create_ticket_message.OrderItem(
+                            name=item.name,
+                            quantity=item.quantity
+                        )
+                        for item in self.saga_state.order.items
+                    ]
+                )
+            )
+        )
+
+        self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
+
+    def create_restaurant_ticket_on_success(self, step: BaseStep, payload: dict):
+        response = create_ticket_message.Response(**payload)
+        logging.info(f'Restaurant ticket # {response.ticket_id} created')
+
+        self.saga_state.order.update(restaurant_ticket_id=response.ticket_id)
+
+    def create_restaurant_ticket_on_failure(self, step: BaseStep, payload: dict):
+        logging.info(f'Restaurant ticket creation for saga {self.saga_id} failed: \n'
+                     f'{payload}')
+
+    def reject_restaurant_ticket(self, current_step: AsyncStep):
+        logging.info(f'Compensation: rejecting restaurant ticket #{self.saga_state.order.restaurant_ticket_id} ...')
+
+        message_id = self.send_message_to_other_service(
+            current_step,
+            asdict(
+                reject_ticket_message.Payload(
+                    ticket_id=self.saga_state.order.restaurant_ticket_id
+                )
+            )
+        )
+
+        self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
+
     # def approve_restaurant_ticket(self):
     #     logging.info(f'Approving restaurant ticket #{self.order.restaurant_ticket_id} ...')
     #     task_result = main_celery_app.send_task(

@@ -14,7 +14,6 @@ COPY ./accounting_service/Pipfile* ./
 # install dependencies
 RUN pipenv install --dev --system --deploy --ignore-pipfile
 RUN pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
-RUN pip install redis
 
 # copy the content of the local src directory to the working directory
 COPY ./accounting_service/accounting_service accounting_service

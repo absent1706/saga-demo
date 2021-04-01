@@ -5,8 +5,7 @@ name = "pypi"
 
 [packages]
 celery = "*"
-sqlalchemy = "*"
-psycopg2-binary = "*"
+asyncapi = {extras = ["docs", "http", "redis", "subscriber", "yaml"], version = "*"}
 
 [dev-packages]
 

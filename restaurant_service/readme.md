@@ -2,7 +2,6 @@
 ```
 pipenv install
 pipenv run pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
-pipenv run pip install redis
 ```
 
 # Run worker
