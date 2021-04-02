@@ -338,7 +338,7 @@ class CreateOrderSaga(StatefulSaga):
         self.saga_state.order.update(transaction_id=response.transaction_id)
 
     def authorize_card_on_failure(self, step: BaseStep, payload: dict):
-        logging.info(f'Restaurant ticket creation for saga {self.saga_id} failed: \n'
+        logging.info(f'Card authorization for saga {self.saga_id} failed: \n'
                      f'{payload}')
 
     # def approve_restaurant_ticket(self):
@@ -366,4 +366,4 @@ class CreateOrderSaga(StatefulSaga):
 
 
 if __name__ == '__main__':
-    result = run_success_saga()
+    result = run_random_saga()
