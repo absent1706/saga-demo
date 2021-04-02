@@ -2,6 +2,7 @@ import logging
 import random
 from dataclasses import asdict
 
+import typing
 from celery import Celery, Task
 
 from restaurant_service.app_common import settings
@@ -39,7 +40,7 @@ def create_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
 
 @command_handlers_celery_app.task(bind=True, name=reject_ticket_message.TASK_NAME)
 @saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
-def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
+def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
     payload = reject_ticket_message.Payload(**payload)
 
     # in real world, we would reject a ticket in restaurant service DB
