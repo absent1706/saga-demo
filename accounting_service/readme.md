@@ -1,5 +1,6 @@
 # Setup
 ```
+pipenv --python 3.8
 pipenv install
 pipenv run pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 ```
