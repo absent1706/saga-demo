@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from celery import Celery
 
 
@@ -9,16 +11,24 @@ def failure_task_name(task_name: str):
     return f'{task_name}.response.failure'
 
 
-def serialize_saga_error(exc: BaseException):
+@dataclass
+class SagaErrorPayload:
+    type: str
+    message: str
+    module: str
+    traceback: str
+
+
+def serialize_saga_error(exc: BaseException) -> SagaErrorPayload:
     import traceback
 
     exctype = type(exc)
-    return {
-        'type': getattr(exctype, '__qualname__', exctype.__name__),
-        'message': str(exc),
-        'module': exctype.__module__,
-        'traceback': traceback.format_exc()
-    }
+    return SagaErrorPayload(
+        type=getattr(exctype, '__qualname__', exctype.__name__),
+        message=str(exc),
+        module=exctype.__module__,
+        traceback=traceback.format_exc()
+    )
 
 
 def send_saga_response(celery_app: Celery,

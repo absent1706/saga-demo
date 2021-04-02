@@ -37,7 +37,7 @@ def create_ticket_task(saga_id: int, payload: dict):
         task_name = success_task_name(create_ticket_message.TASK_NAME)
     except Exception as exc:
         logging.exception(exc)
-        payload = serialize_saga_error(exc)
+        payload = asdict(serialize_saga_error(exc))
         task_name = failure_task_name(create_ticket_message.TASK_NAME)
 
     send_saga_response(command_handlers_celery_app,
@@ -59,7 +59,7 @@ def reject_ticket_task(saga_id: int, payload: dict):
         task_name = success_task_name(reject_ticket_message.TASK_NAME)
     except Exception as exc:
         logging.exception(exc)
-        payload = serialize_saga_error(exc)
+        payload = asdict(serialize_saga_error(exc))
         task_name = failure_task_name(reject_ticket_message.TASK_NAME)
 
     send_saga_response(command_handlers_celery_app,

@@ -229,8 +229,18 @@ class CreateOrderSaga(StatefulSaga):
 
                 on_success=self.create_restaurant_ticket_on_success,
                 on_failure=self.create_restaurant_ticket_on_failure
+            ),
+
+            AsyncStep(
+                name='authorize_card',
+                action=self.authorize_card,
+
+                base_task_name=authorize_card_message.TASK_NAME,
+                queue=accounting_service_messaging.COMMANDS_QUEUE,
+
+                on_success=self.authorize_card_on_success,
+                on_failure=self.authorize_card_on_failure
             )
-            # .action(self.authorize_card, self.NO_ACTION) \
             # .action(self.approve_restaurant_ticket, self.NO_ACTION) \
             # .action(self.approve_order, self.NO_ACTION) \
         ]
@@ -307,6 +317,30 @@ class CreateOrderSaga(StatefulSaga):
 
         self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
 
+    def authorize_card(self, current_step: AsyncStep):
+        logging.info(f'Authorizing card for saga {self.saga_id} (amount={self.saga_state.order.price} ...')
+
+        message_id = self.send_message_to_other_service(
+            current_step,
+            asdict(
+                authorize_card_message.Payload(
+                    card_id=self.saga_state.order.card_id,
+                    amount=self.saga_state.order.price
+                )
+            )
+        )
+
+        self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
+
+    def authorize_card_on_success(self, step: BaseStep, payload: dict):
+        response = authorize_card_message.Response(**payload)
+        logging.info(f'Card authorized. Transaction ID: {response.transaction_id}')
+        self.saga_state.order.update(transaction_id=response.transaction_id)
+
+    def authorize_card_on_failure(self, step: BaseStep, payload: dict):
+        logging.info(f'Restaurant ticket creation for saga {self.saga_id} failed: \n'
+                     f'{payload}')
+
     # def approve_restaurant_ticket(self):
     #     logging.info(f'Approving restaurant ticket #{self.order.restaurant_ticket_id} ...')
     #     task_result = main_celery_app.send_task(
@@ -324,27 +358,6 @@ class CreateOrderSaga(StatefulSaga):
     #     task_result.get(timeout=self.TIMEOUT)
     #     logging.info(f'Compensation: restaurant ticket #{self.order.restaurant_ticket_id} approved')
     #
-    # def authorize_card(self):
-    #     logging.info(f'Authorizing card (amount={self.order.price}) ...')
-    #     task_result = main_celery_app.send_task(
-    #         authorize_card_message.TASK_NAME,
-    #         args=[asdict(
-    #             authorize_card_message.Payload(card_id=self.order.card_id,
-    #                                            amount=self.order.price)
-    #         )],
-    #         queue=accounting_service_messaging.COMMANDS_QUEUE)
-    #
-    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.AUTHORIZING_CREDIT_CARD,
-    #                            last_message_id=task_result.id)
-    #
-    #     # It's safe to assume success case.
-    #     # In case task handler throws exception,
-    #     #   Celery automatically raises exception here by itself,
-    #     #   and saga library automatically launches compensations
-    #     response = authorize_card_message.Response(**task_result.get(timeout=self.TIMEOUT))
-    #     logging.info(f'Card authorized. Transaction ID: {response.transaction_id}')
-    #     self.order.update(transaction_id=response.transaction_id)
-    #
     # def approve_order(self):
     #     self.order.update(status=OrderStatuses.APPROVED)
     #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
@@ -353,4 +366,4 @@ class CreateOrderSaga(StatefulSaga):
 
 
 if __name__ == '__main__':
-    result = run_random_saga()
+    result = run_success_saga()

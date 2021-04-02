@@ -92,8 +92,8 @@ class BaseSaga:
             return self.steps[step_index - 1]
 
     def run_step(self, step: BaseStep):
-        logger.debug(f'Saga {self.saga_id}: '
-                     f'running "{step.name}" step')
+        logger.info(f'Saga {self.saga_id}: '
+                    f'running "{step.name}" step')
         step.action(step)
 
         # for sync steps, it's assumed we can run next step just after them
@@ -102,8 +102,8 @@ class BaseSaga:
             self.run_next_step_if_exists(step)
 
     def compensate_step(self, step: BaseStep, initial_failure_payload: dict):
-        logger.debug(f'Saga {self.saga_id}: '
-                     f'compensating "{step.name}" step')
+        logger.info(f'Saga {self.saga_id}: '
+                    f'compensating "{step.name}" step')
         step.compensation(step)
         self.compensate_previous_step_if_exists(step, initial_failure_payload)
 
@@ -122,15 +122,15 @@ class BaseSaga:
             self.on_saga_failure(initial_failure_payload)
 
     def on_step_success(self, step: AsyncStep, payload: dict):
-        logger.debug(f'Saga {self.saga_id}: '
-                     f'running on_success for "{step.name}" step')
+        logger.info(f'Saga {self.saga_id}: '
+                    f'running on_success for "{step.name}" step')
 
         step.on_success(step, payload)
         self.run_next_step_if_exists(step)
 
     def on_step_failure(self, step: AsyncStep, payload: dict):
-        logger.debug(f'Saga {self.saga_id}: '
-                     f'running on_failure for "{step.name}" step')
+        logger.info(f'Saga {self.saga_id}: '
+                    f'running on_failure for "{step.name}" step')
 
         step.on_failure(step, payload)
         self.compensate_previous_step_if_exists(step, payload)

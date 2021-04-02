@@ -1,14 +1,16 @@
 import logging
+from dataclasses import asdict
+
 from celery import Celery
 
-from app_common.sagas_framework import send_saga_response
 from consumer_service.app_common import settings
 from consumer_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from consumer_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_REPLY_QUEUE
 from consumer_service.app_common.sagas_framework import \
-    success_task_name, failure_task_name, serialize_saga_error
+    success_task_name, failure_task_name, serialize_saga_error, \
+    send_saga_response
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -31,7 +33,7 @@ def verify_consumer_details_task(saga_id: int, payload: dict):
         task_name = success_task_name(verify_consumer_details_message.TASK_NAME)
     except Exception as exc:
         logging.exception(exc)
-        payload = serialize_saga_error(exc)
+        payload = asdict(serialize_saga_error(exc))
         task_name = failure_task_name(verify_consumer_details_message.TASK_NAME)
 
     send_saga_response(command_handlers_celery_app,
