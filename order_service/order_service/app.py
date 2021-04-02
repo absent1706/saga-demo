@@ -138,7 +138,7 @@ def run_random_saga():
     return _run_saga(input_data=dict(
         **BASE_INPUT_DATA,
         consumer_id=random.randint(1, 100),
-        price=random.randint(10, 100),
+        price=PRICE_THAT_WILL_FAIL,
         card_id=random.randint(1, 5)
     ))
 
@@ -312,7 +312,9 @@ class CreateOrderSaga(StatefulSaga):
                 reject_ticket_message.Payload(
                     ticket_id=self.saga_state.order.restaurant_ticket_id
                 )
-            )
+            ),
+            # in compensation, it's needed to explicitly set Celery task name
+            task_name=reject_ticket_message.TASK_NAME
         )
 
         self.saga_state_repository.update(self.saga_id, last_message_id=message_id)

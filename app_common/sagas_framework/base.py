@@ -194,9 +194,9 @@ class BaseSaga:
             bind=True
         )(on_failure_handler)
 
-    def send_message_to_other_service(self, step: AsyncStep, payload: dict):
+    def send_message_to_other_service(self, step: AsyncStep, payload: dict, task_name: str = None):
         task_result = self.celery_app.send_task(
-            step.base_task_name,
+            task_name or step.base_task_name,
             args=[
                 self.saga_id,
                 payload
@@ -204,6 +204,7 @@ class BaseSaga:
             queue=step.queue
         )
 
+        print('!!!!\n', payload)
         return task_result.id
 
     def on_saga_success(self):
