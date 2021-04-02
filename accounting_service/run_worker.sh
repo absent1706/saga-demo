@@ -1,0 +1,1 @@
+PYTHONPATH=. pipenv run celery -A accounting_service.worker worker --loglevel=INFO

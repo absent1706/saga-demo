@@ -7,7 +7,7 @@ pipenv run pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 
 # Run worker
 ```
-PYTHONPATH=. pipenv run celery -A accounting_service.worker worker --loglevel=INFO
+./run_worker.sh
 ```
 
 # Run API docs server 

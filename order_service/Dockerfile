@@ -23,4 +23,4 @@ COPY ./app_common order_service/app_common
 # command to run on container start
 ENV PYTHONPATH=.
 ENV FLASK_APP=order_service/app.py
-CMD ["flask run"]
+CMD ["flask", "run"]

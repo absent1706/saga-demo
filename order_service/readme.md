@@ -19,7 +19,7 @@ PYTHONPATH=. python order_service/app.py
 
 # Run Celery worker (to listen for saga replies)
 ```
-PYTHONPATH=. pipenv run celery -A order_service.create_order_saga_worker worker --loglevel=DEBUG 
+./run_worker.sh 
 ```
 
 # Run API docs server 

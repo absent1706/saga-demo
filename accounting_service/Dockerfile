@@ -21,4 +21,4 @@ COPY ./app_common accounting_service/app_common
 
 # command to run on container start
 ENV PYTHONPATH=.
-CMD ["celery", "-A", "accounting_service.worker", "worker", "--loglevel=INFO"]
+CMD ["./run_worker.sh"]
