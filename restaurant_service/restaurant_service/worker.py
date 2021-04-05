@@ -51,8 +51,9 @@ def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[
     return None
 
 
-@command_handlers_celery_app.task(name=approve_ticket_message.TASK_NAME)
-def approve_ticket_task(payload: dict):
+@command_handlers_celery_app.task(bind=True, name=approve_ticket_message.TASK_NAME)
+@saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+def approve_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
     payload = approve_ticket_message.Payload(**payload)
 
     # in real world, we would change ticket status to 'approved' in service DB
