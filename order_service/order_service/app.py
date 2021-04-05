@@ -250,9 +250,12 @@ class CreateOrderSaga(StatefulSaga):
 
                 on_success=self.approve_restaurant_ticket_on_success,
                 on_failure=self.approve_restaurant_ticket_on_failure
+            ),
+
+            SyncStep(
+                name='approve_order',
+                action=self.approve_order
             )
-            # .action(self.approve_restaurant_ticket, self.NO_ACTION) \
-            # .action(self.approve_order, self.NO_ACTION) \
         ]
 
     def verify_consumer_details(self, current_step: AsyncStep):
@@ -373,11 +376,9 @@ class CreateOrderSaga(StatefulSaga):
     def approve_restaurant_ticket_on_failure(self, step: BaseStep, payload: dict):
         logging.info(f'Restaurant ticket #{self.saga_state.order.restaurant_ticket_id} approve failed')
 
-    # def approve_order(self):
-    #     self.order.update(status=OrderStatuses.APPROVED)
-    #     self.saga_state_repository.update_status(self.saga_id, CreateOrderSagaStatuses.SUCCEEDED, last_message_id=None)
-    #
-    #     logging.info(f'Order {self.order.id} approved')
+    def approve_order(self, step: BaseStep):
+        self.saga_state.order.update(status=OrderStatuses.APPROVED)
+        logging.info(f'Order {self.saga_state.order.id} approved')
 
 
 if __name__ == '__main__':
