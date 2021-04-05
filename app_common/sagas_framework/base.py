@@ -204,7 +204,6 @@ class BaseSaga:
             queue=step.queue
         )
 
-        print('!!!!\n', payload)
         return task_result.id
 
     def on_saga_success(self):
