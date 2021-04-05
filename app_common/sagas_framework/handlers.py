@@ -45,7 +45,7 @@ def send_saga_response(celery_app: Celery,
     )
 
 
-def saga_handler(response_queue: str):
+def saga_handler(response_queue: typing.Union[str, None]):
     """
     Apply this decorator between @task and actual task handler.
 
@@ -68,11 +68,12 @@ def saga_handler(response_queue: str):
                 # use convention response task name
                 task_name = failure_task_name(celery_task.name)
 
-            send_saga_response(celery_task.app,
-                               task_name,
-                               response_queue,
-                               saga_id,
-                               response_payload)
+            if response_queue:
+                send_saga_response(celery_task.app,
+                                   task_name,
+                                   response_queue,
+                                   saga_id,
+                                   response_payload)
         return wrapper
 
     return inner

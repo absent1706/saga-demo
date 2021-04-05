@@ -39,7 +39,9 @@ def create_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
 
 
 @command_handlers_celery_app.task(bind=True, name=reject_ticket_message.TASK_NAME)
-@saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+# Note we set response_queue to None for compensations
+#  (there's no need to notify order service about completion)
+@saga_handler(response_queue=None)
 def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
     payload = reject_ticket_message.Payload(**payload)
 
