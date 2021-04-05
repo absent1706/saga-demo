@@ -23,10 +23,10 @@ command_handlers_celery_app.conf.task_default_queue = accounting_service_messagi
 @command_handlers_celery_app.task(bind=True, name=authorize_card_message.TASK_NAME)
 @saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
 def authorize_card_task(self: Task, saga_id: int, payload: dict) -> dict:
-    request = authorize_card_message.Payload(**payload)
+    request_data = authorize_card_message.Payload(**payload)
 
     # emulate an error
-    if request.amount >= 50:
+    if request_data.amount >= 50:
         raise ValueError('Card authorization failed. Insiffucient balance')
 
     # in real app, we would create here DB record with order ID and transaction ID

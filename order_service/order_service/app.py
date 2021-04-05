@@ -5,7 +5,6 @@ import os
 import random
 import traceback
 
-import mimesis  # for fake data generation
 from dataclasses import asdict
 
 from celery import Celery
@@ -91,11 +90,11 @@ def ping():
 BASE_INPUT_DATA = dict(
     items=[
         OrderItem(
-           name=mimesis.Food().dish(),  # some fake dish name
+           name='Dish 1',
            quantity=random.randint(1, 5)
         ),
         OrderItem(
-            name=mimesis.Food().dish(),  # some fake dish name
+            name='Dish 2',
             quantity=random.randint(1, 5)
         )
     ]

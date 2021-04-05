@@ -22,11 +22,11 @@ command_handlers_celery_app.conf.task_default_queue = consumer_service_messaging
 @command_handlers_celery_app.task(bind=True, name=verify_consumer_details_message.TASK_NAME)
 @saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
 def verify_consumer_details_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
-    payload = verify_consumer_details_message.Payload(**payload)
+    request_data = verify_consumer_details_message.Payload(**payload)
 
     # emulate an error if consumer_id is less than 50
-    if payload.consumer_id < 50:
-        raise ValueError(f'Consumer has incorrect id = {payload.consumer_id}')
+    if request_data.consumer_id < 50:
+        raise ValueError(f'Consumer has incorrect id = {request_data.consumer_id}')
 
     return None  # nothing to return
 
