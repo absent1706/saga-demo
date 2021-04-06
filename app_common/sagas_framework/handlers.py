@@ -1,7 +1,10 @@
+import functools
 import logging
 from dataclasses import dataclass, asdict
 
 import typing
+
+import celery
 from celery import Celery, Task
 
 from . import success_task_name, failure_task_name
@@ -45,7 +48,7 @@ def send_saga_response(celery_app: Celery,
     )
 
 
-def saga_handler(response_queue: typing.Union[str, None]):
+def _saga_step_handler(response_queue: typing.Union[str, None], reraise_exceptions=False):
     """
     Apply this decorator between @task and actual task handler.
 
@@ -56,13 +59,22 @@ def saga_handler(response_queue: typing.Union[str, None]):
       because @saga_handler will need access to celery task instance
     """
     def inner(func):
+        @functools.wraps(func)
         def wrapper(celery_task: Task, saga_id: int, payload: dict):
             try:
                 response_payload = func(celery_task, saga_id, payload)  # type: typing.Union[dict, None]
                 # use convention response task name
                 task_name = success_task_name(celery_task.name)
             except BaseException as exc:
+                # let Celery handle retries
+                if isinstance(exc, celery.exceptions.Retry):
+                    raise
+
                 logger.exception(exc)
+
+                if reraise_exceptions:
+                    raise
+
                 # serialize error in a unified way
                 response_payload = asdict(serialize_saga_error(exc))
                 # use convention response task name
@@ -77,3 +89,32 @@ def saga_handler(response_queue: typing.Union[str, None]):
         return wrapper
 
     return inner
+
+
+def saga_step_handler(response_queue: str):
+    """
+    Compensatable saga step assumed.
+    For retriable steps, use corresponding decorator
+
+    It's also assumed that you will use this decorator with
+     @task decorator, see docstring for _saga_step_handler
+    """
+    return _saga_step_handler(response_queue)
+
+
+compensation_step_handler = _saga_step_handler(response_queue=None)
+"""
+It's assumed that you will use this decorator with
+ @task decorator, see docstring for _saga_step_handler
+"""
+
+
+def retriable_action_saga_step_handler(response_queue: str):
+    """
+    It's assumed that you will use this decorator with
+     @task decorator, see docstring for _saga_step_handler
+
+    It's also assumed that you will setup retries for Celery task,
+     see Celery docs at https://docs.celeryproject.org/en/latest/userguide/tasks.html#retrying
+    """
+    return _saga_step_handler(response_queue)

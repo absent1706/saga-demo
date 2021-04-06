@@ -9,7 +9,7 @@ from accounting_service.app_common.messaging import \
     accounting_service_messaging, CREATE_ORDER_SAGA_RESPONSE_QUEUE
 from accounting_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
-from accounting_service.app_common.sagas_framework import saga_handler
+from accounting_service.app_common.sagas_framework import saga_step_handler
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -21,7 +21,7 @@ command_handlers_celery_app.conf.task_default_queue = accounting_service_messagi
 
 
 @command_handlers_celery_app.task(bind=True, name=authorize_card_message.TASK_NAME)
-@saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+@saga_step_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
 def authorize_card_task(self: Task, saga_id: int, payload: dict) -> dict:
     request_data = authorize_card_message.Payload(**payload)
 

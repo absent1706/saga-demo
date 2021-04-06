@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 import typing
 from celery import Celery, Task
+from celery.exceptions import MaxRetriesExceededError
 
 from restaurant_service.app_common import settings
 from restaurant_service.app_common.messaging import restaurant_service_messaging, \
@@ -12,7 +13,9 @@ from restaurant_service.app_common.messaging.restaurant_service_messaging import
     create_ticket_message, reject_ticket_message, approve_ticket_message
 from restaurant_service.app_common.sagas_framework import success_task_name, \
     failure_task_name, serialize_saga_error, send_saga_response
-from restaurant_service.app_common.sagas_framework import saga_handler
+from restaurant_service.app_common.sagas_framework import \
+    saga_step_handler, compensation_step_handler, \
+    retriable_action_saga_step_handler
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -24,7 +27,7 @@ command_handlers_celery_app.conf.task_default_queue = restaurant_service_messagi
 
 
 @command_handlers_celery_app.task(bind=True, name=create_ticket_message.TASK_NAME)
-@saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+@saga_step_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
 def create_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
     request_data = create_ticket_message.Payload(**payload)
 
@@ -40,9 +43,7 @@ def create_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
 
 
 @command_handlers_celery_app.task(bind=True, name=reject_ticket_message.TASK_NAME)
-# Note we set response_queue to None for compensations
-#  (there's no need to notify order service about completion)
-@saga_handler(response_queue=None)
+@compensation_step_handler
 def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
     request_data = reject_ticket_message.Payload(**payload)
 
@@ -52,12 +53,29 @@ def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[
     return None
 
 
-@command_handlers_celery_app.task(bind=True, name=approve_ticket_message.TASK_NAME)
-@saga_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+@command_handlers_celery_app.task(
+    bind=True, name=approve_ticket_message.TASK_NAME,
+    # # it's retriable saga step, so we tell Celery to retry it
+    # # Important Note: if task will fail more than N
+    # autoretry_for=(BaseException,), retry_kwargs={'max_retries': 2},
+    default_retry_delay=5  # set some small retry delay to not wait 3 minutes Celery sets by default
+)
+@retriable_action_saga_step_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
 def approve_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
-    request_data = approve_ticket_message.Payload(**payload)
+    try:
+        request_data = approve_ticket_message.Payload(**payload)
 
-    # in real world, we would change ticket status to 'approved' in service DB
-    logging.info(f'Restaurant ticket {request_data.ticket_id} approved')
+        # emulate 50%-probable first-time failure
+        if True or (random.random() < 0.5) and (self.request.retries == 0):
+            raise EnvironmentError('test error message. Task will retry now')
 
-    return None
+        # in real world, we would change ticket status to 'approved' in service DB
+        logging.info(f'Restaurant ticket {request_data.ticket_id} approved')
+
+        return None
+
+    except Exception as exc:
+        try:
+            raise self.retry(exc=exc, max_retries=2)
+        except MaxRetriesExceededError:
+            raise exc
