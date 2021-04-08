@@ -63,7 +63,7 @@ def approve_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union
     request_data = approve_ticket_message.Payload(**payload)
 
     # emulate 50%-probable first-time failure
-    if True or (random.random() < 0.5) and (self.request.retries == 0):
+    if random.random() < 0.3:
         raise EnvironmentError('test error message. Task will retry now')
 
     # in real world, we would change ticket status to 'approved' in service DB
