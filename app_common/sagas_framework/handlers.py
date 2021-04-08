@@ -48,7 +48,7 @@ def send_saga_response(celery_app: Celery,
     )
 
 
-def _saga_step_handler(response_queue: typing.Union[str, None], reraise_exceptions=False):
+def _saga_step_handler(response_queue: typing.Union[str, None]):
     """
     Apply this decorator between @task and actual task handler.
 
@@ -71,9 +71,6 @@ def _saga_step_handler(response_queue: typing.Union[str, None], reraise_exceptio
                     raise
 
                 logger.exception(exc)
-
-                if reraise_exceptions:
-                    raise
 
                 # serialize error in a unified way
                 response_payload = asdict(serialize_saga_error(exc))
@@ -102,19 +99,10 @@ def saga_step_handler(response_queue: str):
     return _saga_step_handler(response_queue)
 
 
-compensation_step_handler = _saga_step_handler(response_queue=None)
+no_response_saga_step_handler = _saga_step_handler(response_queue=None)
 """
 It's assumed that you will use this decorator with
  @task decorator, see docstring for _saga_step_handler
 """
 
 
-def retriable_action_saga_step_handler(response_queue: str):
-    """
-    It's assumed that you will use this decorator with
-     @task decorator, see docstring for _saga_step_handler
-
-    It's also assumed that you will setup retries for Celery task,
-     see Celery docs at https://docs.celeryproject.org/en/latest/userguide/tasks.html#retrying
-    """
-    return _saga_step_handler(response_queue)
