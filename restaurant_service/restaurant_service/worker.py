@@ -15,7 +15,7 @@ from restaurant_service.app_common.sagas_framework import success_task_name, \
     failure_task_name, serialize_saga_error, send_saga_response
 from restaurant_service.app_common.sagas_framework import \
     saga_step_handler, compensation_step_handler, \
-    retriable_action_saga_step_handler
+    retriable_action_saga_step_handler, auto_retry_then_reraise
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -55,27 +55,18 @@ def reject_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[
 
 @command_handlers_celery_app.task(
     bind=True, name=approve_ticket_message.TASK_NAME,
-    # # it's retriable saga step, so we tell Celery to retry it
-    # # Important Note: if task will fail more than N
-    # autoretry_for=(BaseException,), retry_kwargs={'max_retries': 2},
     default_retry_delay=5  # set some small retry delay to not wait 3 minutes Celery sets by default
 )
 @retriable_action_saga_step_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+@auto_retry_then_reraise(max_retries=2)  # retry task 2 times, then re-raise exception
 def approve_ticket_task(self: Task, saga_id: int, payload: dict) -> typing.Union[dict, None]:
-    try:
-        request_data = approve_ticket_message.Payload(**payload)
+    request_data = approve_ticket_message.Payload(**payload)
 
-        # emulate 50%-probable first-time failure
-        if True or (random.random() < 0.5) and (self.request.retries == 0):
-            raise EnvironmentError('test error message. Task will retry now')
+    # emulate 50%-probable first-time failure
+    if True or (random.random() < 0.5) and (self.request.retries == 0):
+        raise EnvironmentError('test error message. Task will retry now')
 
-        # in real world, we would change ticket status to 'approved' in service DB
-        logging.info(f'Restaurant ticket {request_data.ticket_id} approved')
+    # in real world, we would change ticket status to 'approved' in service DB
+    logging.info(f'Restaurant ticket {request_data.ticket_id} approved')
 
-        return None
-
-    except Exception as exc:
-        try:
-            raise self.retry(exc=exc, max_retries=2)
-        except MaxRetriesExceededError:
-            raise exc
+    return None
