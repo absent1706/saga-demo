@@ -2,9 +2,11 @@ import logging
 import typing
 
 from abc import ABC
+from dataclasses import asdict
+
 from celery import Celery, Task
 
-from .utils import success_task_name, failure_task_name
+from .utils import success_task_name, failure_task_name, serialize_saga_error
 
 
 NO_ACTION = lambda *args: None
@@ -92,20 +94,29 @@ class BaseSaga:
             return self.steps[step_index - 1]
 
     def run_step(self, step: BaseStep):
-        logger.info(f'Saga {self.saga_id}: '
-                    f'running "{step.name}" step')
-        step.action(step)
+        error_occured = False
 
-        # for sync steps, it's assumed we can run next step just after them
-        # for async ones, we will wait for on_success or on_failure
-        if isinstance(step, SyncStep):
-            self.run_next_step_if_exists(step)
+        try:
+            logger.info(f'Saga {self.saga_id}: '
+                        f'running "{step.name}" step')
+            step.action(step)
+        except BaseException as exc:
+            error_occured = True
+            self.compensate(
+                step,
+                initial_failure_payload=asdict(serialize_saga_error(exc))
+            )
+
+        if not error_occured:
+            # for sync steps, it's assumed we can run next step just after them
+            # for async ones, we will wait for on_success or on_failure
+            if isinstance(step, SyncStep):
+                self.run_next_step_if_exists(step)
 
     def compensate_step(self, step: BaseStep, initial_failure_payload: dict):
         logger.info(f'Saga {self.saga_id}: '
                     f'compensating "{step.name}" step')
         step.compensation(step)
-        self.compensate_previous_step_if_exists(step, initial_failure_payload)
 
     def run_next_step_if_exists(self, step: BaseStep):
         next_step = self._get_next_step(step)
@@ -133,7 +144,15 @@ class BaseSaga:
                     f'running on_failure for "{step.name}" step')
 
         step.on_failure(step, payload)
-        self.compensate_previous_step_if_exists(step, payload)
+        self.compensate(step, payload)
+
+    def compensate(self, failed_step: BaseStep, initial_failure_payload: dict = None):
+        step = failed_step
+        while step:
+            self.compensate_step(step, initial_failure_payload)
+            step = self._get_previous_step(step)
+
+        self.on_saga_failure(initial_failure_payload)
 
     def execute(self):
         self.run_step(self.steps[0])

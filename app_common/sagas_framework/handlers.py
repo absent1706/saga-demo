@@ -7,30 +7,9 @@ import typing
 import celery
 from celery import Celery, Task
 
-from . import success_task_name, failure_task_name
-
+from .utils import success_task_name, failure_task_name, serialize_saga_error
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class SagaErrorPayload:
-    type: str
-    message: str
-    module: str
-    traceback: str
-
-
-def serialize_saga_error(exc: BaseException) -> SagaErrorPayload:
-    import traceback
-
-    exctype = type(exc)
-    return SagaErrorPayload(
-        type=getattr(exctype, '__qualname__', exctype.__name__),
-        message=str(exc),
-        module=exctype.__module__,
-        traceback=traceback.format_exc()
-    )
 
 
 def send_saga_response(celery_app: Celery,

@@ -357,7 +357,9 @@ class CreateOrderSaga(StatefulSaga):
                      f'{payload}')
 
     def approve_restaurant_ticket(self, current_step: AsyncStep):
+
         logging.info(f'Approving restaurant ticket #{self.saga_state.order.restaurant_ticket_id} ...')
+        raise KeyError('some test error')
 
         message_id = self.send_message_to_other_service(
             current_step,
