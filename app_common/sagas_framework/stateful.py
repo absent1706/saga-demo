@@ -44,7 +44,9 @@ class StatefulSaga(BaseSaga, abc.ABC):
 
     def run_step(self, step: BaseStep):
         self.saga_state_repository.update_status(self.saga_id, status=f'{step.name}.running')
+        logging.warning(f'!!  running {step.name}')
         super().run_step(step)
+        logging.warning(f'!! finished {step.name}')
 
     def compensate_step(self, step: BaseStep, initial_failure_payload: dict):
         self.saga_state_repository.update_status(self.saga_id, status=f'{step.name}.compensating')

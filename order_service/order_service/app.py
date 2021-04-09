@@ -359,7 +359,9 @@ class CreateOrderSaga(StatefulSaga):
     def approve_restaurant_ticket(self, current_step: AsyncStep):
 
         logging.info(f'Approving restaurant ticket #{self.saga_state.order.restaurant_ticket_id} ...')
-        raise KeyError('some test error')
+
+        # uncomment below string to emulate saga step failure on orchestrator side
+        # raise KeyError('some saga step error in orchestrator code')
 
         message_id = self.send_message_to_other_service(
             current_step,
@@ -384,4 +386,4 @@ class CreateOrderSaga(StatefulSaga):
 
 
 if __name__ == '__main__':
-    result = run_success_saga()
+    result = run_random_saga()

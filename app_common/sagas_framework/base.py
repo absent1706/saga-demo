@@ -94,50 +94,22 @@ class BaseSaga:
             return self.steps[step_index - 1]
 
     def run_step(self, step: BaseStep):
-        error_occured = False
-
-        try:
-            logger.info(f'Saga {self.saga_id}: '
-                        f'running "{step.name}" step')
-            step.action(step)
-        except BaseException as exc:
-            error_occured = True
-            self.compensate(
-                step,
-                initial_failure_payload=asdict(serialize_saga_error(exc))
-            )
-
-        if not error_occured:
-            # for sync steps, it's assumed we can run next step just after them
-            # for async ones, we will wait for on_success or on_failure
-            if isinstance(step, SyncStep):
-                self.run_next_step_if_exists(step)
+        logger.info(f'Saga {self.saga_id}: running "{step.name}" step')
+        step.action(step)
 
     def compensate_step(self, step: BaseStep, initial_failure_payload: dict):
         logger.info(f'Saga {self.saga_id}: '
                     f'compensating "{step.name}" step')
         step.compensation(step)
 
-    def run_next_step_if_exists(self, step: BaseStep):
-        next_step = self._get_next_step(step)
-        if next_step:
-            self.run_step(next_step)
-        else:
-            self.on_saga_success()
-
-    def compensate_previous_step_if_exists(self, step: BaseStep, initial_failure_payload: dict):
-        previous_step = self._get_previous_step(step)
-        if previous_step:
-            self.compensate_step(previous_step, initial_failure_payload)
-        else:
-            self.on_saga_failure(initial_failure_payload)
-
     def on_step_success(self, step: AsyncStep, payload: dict):
         logger.info(f'Saga {self.saga_id}: '
                     f'running on_success for "{step.name}" step')
 
         step.on_success(step, payload)
-        self.run_next_step_if_exists(step)
+
+        next_step = self._get_next_step(step)
+        self.execute(next_step)
 
     def on_step_failure(self, step: AsyncStep, payload: dict):
         logger.info(f'Saga {self.saga_id}: '
@@ -154,8 +126,40 @@ class BaseSaga:
 
         self.on_saga_failure(initial_failure_payload)
 
-    def execute(self):
-        self.run_step(self.steps[0])
+    def execute(self, starting_step: BaseStep = None):
+        if starting_step is None:
+            starting_step = self.steps[0]
+
+        step = starting_step
+        need_to_run_next_step = True
+        error_occured = None
+
+        while step and need_to_run_next_step:
+            # noinspection PyBroadException
+            try:
+                self.run_step(step)
+
+            except BaseException as exc:
+                from celery.contrib import rdb; rdb.set_trace()
+                error_occured = exc
+                break
+
+            # After running a step, we will run next one if current step was sync
+            # For AsyncStep's, we firstly wait for on_success event from step handlers
+            #  and only then continue saga (see on_step_success method)
+            need_to_run_next_step = isinstance(step, SyncStep)
+            if need_to_run_next_step:
+                step = self._get_next_step(step)
+
+        # if error occured, compensate saga
+        if error_occured:
+            self.compensate(
+                step,
+                initial_failure_payload=asdict(serialize_saga_error(error_occured))
+            )
+        # if we ended on a last step, run on_saga_success
+        elif step == self.steps[-1]:
+            self.on_saga_success()
 
     @property
     def async_steps(self) -> typing.List[AsyncStep]:
