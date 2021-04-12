@@ -140,7 +140,6 @@ class BaseSaga:
                 self.run_step(step)
 
             except BaseException as exc:
-                from celery.contrib import rdb; rdb.set_trace()
                 error_occured = exc
                 break
 
