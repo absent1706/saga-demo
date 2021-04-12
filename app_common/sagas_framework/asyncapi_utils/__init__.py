@@ -1,4 +1,7 @@
+import typing
+
 import asyncapi
+
 from .. import success_task_name, failure_task_name, SagaErrorPayload
 
 fake_asyncapi_servers = {'development': asyncapi.Server(
@@ -8,7 +11,7 @@ fake_asyncapi_servers = {'development': asyncapi.Server(
 )}
 
 
-def message_to_channel(message: asyncapi.Message, response: asyncapi.Message = None, publish_made_first=False, description: str = None):
+def message_to_channel(message: asyncapi.Message, response: asyncapi.Message = None, publish_made_first=False, description: str = None) -> typing.Tuple[str, asyncapi.Channel]:
     if publish_made_first:
         first_action, second_action = 'publish', 'subscribe'
     else:
@@ -28,8 +31,29 @@ def message_to_channel(message: asyncapi.Message, response: asyncapi.Message = N
     return message.name, asyncapi.Channel(**channel_kwargs)
 
 
-def message_to_component(message: asyncapi.Message):
+def message_to_component(message: asyncapi.Message) -> typing.Tuple[str, asyncapi.Message]:
     return message.name, message
+
+
+def asyncapi_components_from_asyncapi_channels(channels: typing.Iterable[asyncapi.Channel]):
+    """
+    Allows to more easy generate AsyncApi docs (components sections)
+
+    :param channels:
+    :return:
+    """
+
+    messages = list()
+    for channel in channels:
+        if channel.publish.message:
+            messages.append(channel.publish.message)
+        if channel.subscribe.message:
+            messages.append(channel.subscribe.message)
+
+    components = [message_to_component(message) for message in messages]
+    return asyncapi.Components(messages=dict(components))
+
+#############
 
 
 def asyncapi_message_for_success_response(base_task_name: str,
