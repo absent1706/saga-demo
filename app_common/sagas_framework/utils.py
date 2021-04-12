@@ -1,3 +1,4 @@
+import traceback
 from dataclasses import dataclass, asdict
 
 from celery import Celery, Task
@@ -19,13 +20,16 @@ class SagaErrorPayload:
     traceback: str
 
 
-def serialize_saga_error(exc: BaseException) -> SagaErrorPayload:
-    import traceback
+def format_exception_as_python_does(e: BaseException):
+    # taken from https://stackoverflow.com/a/35498685
+    return traceback.format_exception(type(e), e, e.__traceback__)
 
+
+def serialize_saga_error(exc: BaseException) -> SagaErrorPayload:
     exctype = type(exc)
     return SagaErrorPayload(
         type=getattr(exctype, '__qualname__', exctype.__name__),
         message=str(exc),
         module=exctype.__module__,
-        traceback=traceback.format_exc()
+        traceback=format_exception_as_python_does(exc)
     )

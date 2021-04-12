@@ -6,8 +6,8 @@ from dataclasses import asdict
 
 from celery import Celery, Task
 
-from .utils import success_task_name, failure_task_name, serialize_saga_error
-
+from .utils import success_task_name, failure_task_name, serialize_saga_error, \
+    format_exception_as_python_does
 
 NO_ACTION = lambda *args: None
 logger = logging.getLogger(__name__)
@@ -119,12 +119,21 @@ class BaseSaga:
         self.compensate(step, payload)
 
     def compensate(self, failed_step: BaseStep, initial_failure_payload: dict = None):
-        step = failed_step
-        while step:
-            self.compensate_step(step, initial_failure_payload)
-            step = self._get_previous_step(step)
+        try:
+            step = failed_step
+            while step:
+                self.compensate_step(step, initial_failure_payload)
+                step = self._get_previous_step(step)
 
-        self.on_saga_failure(initial_failure_payload)
+            self.on_saga_failure(failed_step, initial_failure_payload)
+
+        except BaseException as exception:
+            self.on_compensation_failure(
+                initially_failed_step=failed_step,
+                initial_failure_payload=initial_failure_payload,
+                compensation_failed_step=step,
+                compensation_exception=exception
+            )
 
     def execute(self, starting_step: BaseStep = None):
         if starting_step is None:
@@ -235,10 +244,21 @@ class BaseSaga:
 
         logger.info(f'Saga {self.saga_id} succeeded')
 
-    def on_saga_failure(self, initial_failure_payload: dict):
+    def on_saga_failure(self, failed_step: BaseStep, initial_failure_payload: dict):
         """
-        This method runs when saga is failed (after lasy compensation runs)
+        This method runs when saga is failed (after all compensations finished)
         """
-        logger.info(f'Saga {self.saga_id} failed. \n'
-                    f'Initial failure details: {initial_failure_payload}')
+        logger.info(f'Saga {self.saga_id} failed on "{failed_step.name}" step. \n'
+                    f'Failure details: {initial_failure_payload}')
 
+    def on_compensation_failure(self, initially_failed_step: BaseStep,
+                                initial_failure_payload: dict,
+                                compensation_failed_step: BaseStep,
+                                compensation_exception: BaseException):
+        """
+        This method runs when compensation step unexpectedly failed,
+          i.e. saga wasn't able to successfully rollback
+        """
+        logger.info(f'Saga {self.saga_id} failed while compensating "{compensation_failed_step.name}" step.\n'
+                    f'Error details: {format_exception_as_python_does(compensation_exception)} \n \n'
+                    f'Initial failure details: {initial_failure_payload}')

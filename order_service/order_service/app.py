@@ -386,4 +386,4 @@ class CreateOrderSaga(StatefulSaga):
 
 
 if __name__ == '__main__':
-    result = run_random_saga()
+    result = run_success_saga()

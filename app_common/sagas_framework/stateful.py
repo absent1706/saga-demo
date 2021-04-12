@@ -65,7 +65,7 @@ class StatefulSaga(BaseSaga, abc.ABC):
         self.saga_state_repository.update_status(self.saga_id, 'succeeded')
         super().on_saga_success()
 
-    def on_saga_failure(self, initial_failure_payload: dict, *args, **kwargs):
+    def on_saga_failure(self, *args, **kwargs):
         self.saga_state_repository.update_status(self.saga_id, 'failed')
-        super().on_saga_failure(initial_failure_payload, *args, **kwargs)
+        super().on_saga_failure(*args, **kwargs)
 
