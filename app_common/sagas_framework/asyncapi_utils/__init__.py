@@ -1,4 +1,5 @@
 import asyncapi
+from .. import success_task_name, failure_task_name, SagaErrorPayload
 
 fake_asyncapi_servers = {'development': asyncapi.Server(
     url='localhost',
@@ -29,3 +30,27 @@ def message_to_channel(message: asyncapi.Message, response: asyncapi.Message = N
 
 def message_to_component(message: asyncapi.Message):
     return message.name, message
+
+
+def asyncapi_message_for_success_response(base_task_name: str,
+                                          title: str = None,
+                                          summary: str = None,
+                                          payload_dataclass: object = None):
+    return asyncapi.Message(
+        name=success_task_name(base_task_name),
+        title=title,
+        summary=summary,
+        payload=payload_dataclass
+    )
+
+
+def asyncapi_message_for_failure_response(base_task_name: str,
+                                          title: str = None,
+                                          summary: str = None,
+                                          payload_dataclass: type = SagaErrorPayload):
+    return asyncapi.Message(
+        name=failure_task_name(base_task_name),
+        title=title,
+        summary=summary,
+        payload=payload_dataclass
+    )
