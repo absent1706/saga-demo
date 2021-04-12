@@ -132,7 +132,7 @@ class BaseSaga:
 
         step = starting_step
         need_to_run_next_step = True
-        error_occured = None
+        exception = None
 
         while step and need_to_run_next_step:
             # noinspection PyBroadException
@@ -140,7 +140,7 @@ class BaseSaga:
                 self.run_step(step)
 
             except BaseException as exc:
-                error_occured = exc
+                exception = exc
                 break
 
             # After running a step, we will run next one if current step was sync
@@ -151,10 +151,10 @@ class BaseSaga:
                 step = self._get_next_step(step)
 
         # if error occured, compensate saga
-        if error_occured:
+        if exception:
             self.compensate(
                 step,
-                initial_failure_payload=asdict(serialize_saga_error(error_occured))
+                initial_failure_payload=asdict(serialize_saga_error(exception))
             )
         # if we ended on a last step, run on_saga_success
         elif step == self.steps[-1]:
