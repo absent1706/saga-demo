@@ -45,9 +45,9 @@ def asyncapi_components_from_asyncapi_channels(channels: typing.Iterable[asyncap
 
     messages = list()
     for channel in channels:
-        if channel.publish.message:
+        if channel.publish and channel.publish.message:
             messages.append(channel.publish.message)
-        if channel.subscribe.message:
+        if channel.subscribe and channel.subscribe.message:
             messages.append(channel.subscribe.message)
 
     components = [message_to_component(message) for message in messages]

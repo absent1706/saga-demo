@@ -1,10 +1,10 @@
 import dataclasses
 from typing import List
-from ...sagas_framework.asyncapi_utils import asyncapi_message_for_success_response, \
-    asyncapi_message_for_failure_response
 
 import asyncapi
 
+from ...sagas_framework.asyncapi_utils import \
+    asyncapi_message_for_success_response
 
 TASK_NAME = 'restaurant_service.create_ticket'
 
@@ -41,5 +41,3 @@ success_response = asyncapi_message_for_success_response(
     title='Ticket ID is returned',
     payload_dataclass=Response
 )
-
-# failure_response = asyncapi_message_for_failure_response(TASK_NAME)

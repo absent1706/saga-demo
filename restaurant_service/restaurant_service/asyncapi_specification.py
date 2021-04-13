@@ -15,8 +15,7 @@ We assume that they have standard format (see SagaErrorPayload dataclass)
 channels = dict([
     message_to_channel(create_ticket_message.message,
                        create_ticket_message.success_response),
-    message_to_channel(reject_ticket_message.message,
-                       reject_ticket_message.success_response),
+    message_to_channel(reject_ticket_message.message),  # compensation step has no resppnse
     message_to_channel(approve_ticket_message.message,
                        approve_ticket_message.success_response),
 ])

@@ -2,7 +2,7 @@ import dataclasses
 
 import asyncapi
 
-from consumer_service.app_common.sagas_framework.asyncapi_utils import \
+from ...sagas_framework.asyncapi_utils import \
     asyncapi_message_for_success_response
 
 TASK_NAME = 'consumer_service.verify_consumer_details'
