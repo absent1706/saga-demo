@@ -1,28 +1,25 @@
-import abc
+import enum
 import enum
 import logging
 import os
 import random
-import traceback
-
 from dataclasses import asdict
 
 from celery import Celery
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import Session
-from sqlalchemy_mixins import AllFeaturesMixin
+from sqlalchemy_mixins import AllFeaturesMixin, TimestampsMixin
 
 from order_service.app_common import settings
+from order_service.app_common.messaging import consumer_service_messaging, \
+    accounting_service_messaging, restaurant_service_messaging
 from order_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
 from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
-from order_service.app_common.messaging import consumer_service_messaging, \
-    accounting_service_messaging, restaurant_service_messaging
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from order_service.app_common.sagas_framework import BaseSaga, SyncStep, \
+from order_service.app_common.sagas_framework import SyncStep, \
     AsyncStep, BaseStep, AbstractSagaStateRepository, StatefulSaga
 
 logging.basicConfig(level=logging.DEBUG)
@@ -69,7 +66,7 @@ class OrderItem(BaseModel):
     quantity = db.Column(db.Integer)
 
 
-class CreateOrderSagaState(BaseModel):
+class CreateOrderSagaState(BaseModel, TimestampsMixin):
     id = db.Column(db.Integer, primary_key=True)
     last_message_id = db.Column(db.String)
 
@@ -386,4 +383,4 @@ class CreateOrderSaga(StatefulSaga):
 
 
 if __name__ == '__main__':
-    result = run_success_saga()
+    result = run_random_saga()

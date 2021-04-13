@@ -1,6 +1,5 @@
 import logging
 import typing
-
 from abc import ABC
 from dataclasses import asdict
 
@@ -108,8 +107,11 @@ class BaseSaga:
 
         step.on_success(step, payload)
 
-        next_step = self._get_next_step(step)
-        self.execute(next_step)
+        if self.step_is_last(step):
+            self.on_saga_success()
+        else:
+            next_step = self._get_next_step(step)
+            self.execute(next_step)
 
     def on_step_failure(self, step: AsyncStep, payload: dict):
         logger.info(f'Saga {self.saga_id}: '
@@ -131,7 +133,7 @@ class BaseSaga:
             self.on_compensation_failure(
                 initially_failed_step=failed_step,
                 initial_failure_payload=initial_failure_payload,
-                compensation_failed_step=step,
+                compensation_failed_step=failed_step,
                 compensation_exception=exception
             )
 
@@ -166,7 +168,7 @@ class BaseSaga:
                 initial_failure_payload=asdict(serialize_saga_error(exception))
             )
         # if we ended on a last step, run on_saga_success
-        elif step == self.steps[-1]:
+        elif step is None:
             self.on_saga_success()
 
     @property
@@ -262,3 +264,6 @@ class BaseSaga:
         logger.info(f'Saga {self.saga_id} failed while compensating "{compensation_failed_step.name}" step.\n'
                     f'Error details: {format_exception_as_python_does(compensation_exception)} \n \n'
                     f'Initial failure details: {initial_failure_payload}')
+
+    def step_is_last(self, step: BaseStep):
+        return step == self.steps[-1]
