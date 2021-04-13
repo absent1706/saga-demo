@@ -1,8 +1,9 @@
 import dataclasses
-from decimal import Decimal
 
 import asyncapi
 
+from accounting_service.app_common.sagas_framework.asyncapi_utils import \
+    asyncapi_message_for_success_response
 
 TASK_NAME = 'accounting_service.authorize_card'
 
@@ -25,8 +26,9 @@ message = asyncapi.Message(
     payload=Payload,
 )
 
-response = asyncapi.Message(
-    name=f'{TASK_NAME}.response',
-    title='Transaction ID',
-    payload=Response,
+success_response = asyncapi_message_for_success_response(
+    TASK_NAME,
+    title='Transaction ID is returned',
+    payload_dataclass=Response
 )
+
