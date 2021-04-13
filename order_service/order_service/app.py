@@ -1,4 +1,4 @@
-import enum
+import datetime
 import enum
 import logging
 import os
@@ -71,6 +71,10 @@ class CreateOrderSagaState(BaseModel, TimestampsMixin):
     last_message_id = db.Column(db.String)
 
     status = db.Column(db.String, default='not_started')
+    failed_step = db.Column(db.String)
+    failed_at = db.Column(db.TIMESTAMP)
+    failure_details = db.Column(db.JSON)
+
     order_id = db.Column(db.Integer, db.ForeignKey('order.id'))
     order = db.relationship("Order")
 
@@ -182,6 +186,7 @@ def run_success_saga():
 #         card_id=random.randint(1, 5)
 #     ))
 
+
 class CreateOrderSagaRepository(AbstractSagaStateRepository):
     def get_saga_state_by_id(self, saga_id: int) -> CreateOrderSagaState:
         return CreateOrderSagaState.find(saga_id)
@@ -191,6 +196,13 @@ class CreateOrderSagaRepository(AbstractSagaStateRepository):
 
     def update(self, saga_id: int, **fields_to_update: str) -> object:
         return self.get_saga_state_by_id(saga_id).update(**fields_to_update)
+
+    def on_step_failure(self, saga_id: int, failed_step: BaseStep, initial_failure_payload: dict) -> object:
+        return self.get_saga_state_by_id(saga_id).update(
+            failed_step=failed_step.name,
+            failed_at=datetime.datetime.utcnow(),
+            failure_details=initial_failure_payload
+        )
 
 
 class CreateOrderSaga(StatefulSaga):

@@ -1,5 +1,4 @@
 import abc
-import logging
 
 from celery import Celery
 
@@ -18,6 +17,10 @@ class AbstractSagaStateRepository(abc.ABC):
     @abc.abstractmethod
     def update(self, saga_id: int, **fields_to_update: str) -> object:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def on_step_failure(self, saga_id: int, failed_step: BaseStep, initial_failure_payload: dict) -> object:
+        pass
 
 
 class StatefulSaga(BaseSaga, abc.ABC):
@@ -55,13 +58,13 @@ class StatefulSaga(BaseSaga, abc.ABC):
         self.saga_state_repository.update_status(self.saga_id, status=f'{step.name}.succeeded')
         super().on_step_success(step, *args, **kwargs)
 
-    def on_step_failure(self, step: AsyncStep, *args, **kwargs):
-        self.saga_state_repository.update_status(self.saga_id, status=f'{step.name}.failed')
-        super().on_step_failure(step, *args, **kwargs)
+    def on_step_failure(self, failed_step: AsyncStep, payload: dict):
+        self.saga_state_repository.update_status(self.saga_id, status=f'{failed_step.name}.failed')
+        self.saga_state_repository.on_step_failure(self.saga_id, failed_step, payload)
+        super().on_step_failure(failed_step, payload)
 
     def on_saga_success(self):
         super().on_saga_success()
-        logging.warning(f'!!  succeeded')
         self.saga_state_repository.update_status(self.saga_id, 'succeeded')
 
     def on_saga_failure(self, *args, **kwargs):
