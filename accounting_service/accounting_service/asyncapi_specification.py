@@ -9,7 +9,7 @@ from accounting_service.app_common.sagas_framework.asyncapi_utils import \
 
 """
 IMPORTANT!
-We do NOT document error responses such as `restaurant_service.create_ticket.response.success`
+We do NOT document error responses such as `restaurant_service.create_ticket.response.failure`
 We assume that they have standard format (see SagaErrorPayload dataclass) 
 """
 channels = dict([

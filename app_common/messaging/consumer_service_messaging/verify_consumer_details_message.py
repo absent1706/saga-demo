@@ -2,6 +2,8 @@ import dataclasses
 
 import asyncapi
 
+from consumer_service.app_common.sagas_framework.asyncapi_utils import \
+    asyncapi_message_for_success_response
 
 TASK_NAME = 'consumer_service.verify_consumer_details'
 
@@ -19,3 +21,5 @@ message = asyncapi.Message(
             'If validation fails, it throws an exception',
     payload=Payload,
 )
+
+success_response = asyncapi_message_for_success_response(TASK_NAME)
