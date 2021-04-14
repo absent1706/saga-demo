@@ -104,17 +104,20 @@ BASE_INPUT_DATA = dict(
 # magic numbers that make consumer_service succeed or fail
 CONSUMER_ID_THAT_WILL_SUCCEED = 70
 CONSUMER_ID_THAT_WILL_FAIL = 10
-CONSUMER_ID_THAT_WILL_FAIL_BECAUSE_OF_TIMEOUT = 55
 
 # magic numbers that make accounting_service succeed or fail
 PRICE_THAT_WILL_SUCCEED = 20
 PRICE_THAT_WILL_FAIL = 80
+
+QUANTITY_THAT_WILL_MAKE_ORCHESTRATOR_FAIL = 100500
 
 
 def _run_saga(input_data):
     order = Order.create(**input_data)
     saga_state = CreateOrderSagaState.create(order_id=order.id)
     CreateOrderSaga(main_celery_app, saga_state.id).execute()
+    return f'Scheduled saga #{saga_state.id}. ' \
+           f'See its progress in order_service worker'
 
 
 @app.route('/')
@@ -126,7 +129,7 @@ def welcome_page():
       <li><a href="/run-random-saga">/run-random-saga</a></li>
       <li><a href="/run-success-saga">/run-success-saga</a></li>
       <li><a href="/run-saga-failing-on-consumer-verification-because-of-incorrect-id">/run-saga-failing-on-consumer-verification-because-of-incorrect-id</a></li>
-      <li><a href="/run-saga-failing-on-consumer-verification-because-of-timeout">/run-saga-failing-on-consumer-verification-because-of-timeout</a></li>
+      <li><a href="/run-saga-where-orchestrator-code-fails">/run-saga-where-orchestrator-code-fails</a></li>
       <li><a href="/run-saga-failing-on-card-authorization">/run-saga-failing-on-card-authorization</a></li>
     </ul>
     '''
@@ -154,37 +157,43 @@ def run_success_saga():
     ))
 
 
-# @app.route('/run-saga-failing-on-consumer-verification-because-of-incorrect-id')
-# def run_saga_failing_on_consumer_verification_incorrect_id():
-#     # it should fail on consumer verification stage
-#     return _run_saga(input_data=dict(
-#         **BASE_INPUT_DATA,
-#         consumer_id=CONSUMER_ID_THAT_WILL_FAIL,
-#         price=PRICE_THAT_WILL_SUCCEED,
-#         card_id=random.randint(1, 5)
-#     ))
-#
-#
-# @app.route('/run-saga-failing-on-consumer-verification-because-of-timeout')
-# def run_saga_failing_on_consumer_verification_timeout():
-#     # it should fail on consumer verification stage
-#     return _run_saga(input_data=dict(
-#         **BASE_INPUT_DATA,
-#         consumer_id=CONSUMER_ID_THAT_WILL_FAIL_BECAUSE_OF_TIMEOUT,
-#         price=PRICE_THAT_WILL_SUCCEED,
-#         card_id=random.randint(1, 5)
-#     ))
-#
-#
-# @app.route('/run-saga-failing-on-card-authorization')
-# def run_saga_failing_on_card_authorization():
-#     # it should fail on card authorization stage
-#     return _run_saga(input_data=dict(
-#         **BASE_INPUT_DATA,
-#         consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
-#         price=PRICE_THAT_WILL_FAIL,
-#         card_id=random.randint(1, 5)
-#     ))
+@app.route('/run-saga-failing-on-consumer-verification-because-of-incorrect-id')
+def run_saga_failing_on_consumer_verification_incorrect_id():
+    # it should fail on consumer verification stage
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_FAIL,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+
+@app.route('/run-saga-where-orchestrator-code-fails')
+def run_saga_where_orchestrator_code_fails():
+    # here, orchestrator code will fail
+    # it's an edge case (usually step handler report failure)
+    return _run_saga(input_data=dict(
+        items=[
+            OrderItem(
+                name='Dish 1',
+                quantity=QUANTITY_THAT_WILL_MAKE_ORCHESTRATOR_FAIL
+            )
+        ],
+        consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
+        price=PRICE_THAT_WILL_SUCCEED,
+        card_id=random.randint(1, 5)
+    ))
+
+
+@app.route('/run-saga-failing-on-card-authorization')
+def run_saga_failing_on_card_authorization():
+    # it should fail on card authorization stage
+    return _run_saga(input_data=dict(
+        **BASE_INPUT_DATA,
+        consumer_id=CONSUMER_ID_THAT_WILL_SUCCEED,
+        price=PRICE_THAT_WILL_FAIL,
+        card_id=random.randint(1, 5)
+    ))
 
 
 class CreateOrderSagaRepository(AbstractSagaStateRepository):
@@ -294,7 +303,11 @@ class CreateOrderSaga(StatefulSaga):
         logging.info(f'Compensation: order {self.saga_state.order.id} rejected')
 
     def create_restaurant_ticket(self, current_step: AsyncStep):
-        logging.info(f'Creating restaurent ticket for saga {self.saga_id} ...')
+        logging.info(f'Creating restaurant ticket for saga {self.saga_id} ...')
+
+        # emulating saga step failure on ORCHESTRATOR side
+        if self.saga_state.order.items[0].quantity == QUANTITY_THAT_WILL_MAKE_ORCHESTRATOR_FAIL:
+            raise KeyError('Incorrect quantity')
 
         message_id = self.send_message_to_other_service(
             current_step,
@@ -366,11 +379,7 @@ class CreateOrderSaga(StatefulSaga):
                      f'{payload}')
 
     def approve_restaurant_ticket(self, current_step: AsyncStep):
-
         logging.info(f'Approving restaurant ticket #{self.saga_state.order.restaurant_ticket_id} ...')
-
-        # uncomment below string to emulate saga step failure on orchestrator side
-        # raise KeyError('some saga step error in orchestrator code')
 
         message_id = self.send_message_to_other_service(
             current_step,
