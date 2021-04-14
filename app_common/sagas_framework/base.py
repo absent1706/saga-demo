@@ -124,8 +124,8 @@ class BaseSaga:
         try:
             step = failed_step
             while step:
-                self.compensate_step(step, initial_failure_payload)
                 step = self._get_previous_step(step)
+                self.compensate_step(step, initial_failure_payload)
 
             self.on_saga_failure(failed_step, initial_failure_payload)
 
