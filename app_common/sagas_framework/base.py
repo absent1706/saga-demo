@@ -122,10 +122,10 @@ class BaseSaga:
 
     def compensate(self, failed_step: BaseStep, initial_failure_payload: dict = None):
         try:
-            step = failed_step
+            step = self._get_previous_step(failed_step)
             while step:
-                step = self._get_previous_step(step)
                 self.compensate_step(step, initial_failure_payload)
+                step = self._get_previous_step(step)
 
             self.on_saga_failure(failed_step, initial_failure_payload)
 
