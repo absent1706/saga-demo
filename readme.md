@@ -1,12 +1,59 @@
 
-# Saga pattern for microservices example - with timeouts
+# Saga pattern for microservices example
 
 It's basically an implementation of CreateOrderSaga from [Chris Richardson book on Microservices](https://microservices.io/book)
 
-In repo, we have `order_service` which is the saga entrypoint, 
+In repository, we have  
 and 3 other services with workers handling commands that `order_service` sends : `consumer_service`, `restaurant_service`, `accounting_service`.
 
-For basic saga pattern, [saga_py](https://github.com/flowpl/saga_py) library is used.
+# Architecture
+Whole ecosystem for this app includes:
+
+## Interface / Launcher 
+`order_service` Flask app which is the saga entrypoint needed just to initiate saga runs. 
+
+Initiating a saga means simply sending first Celery task to Saga Handler Service
+
+
+## Saga Handler Services 
+`consumer_service`, `restaurant_service`, `accounting_service`. 
+
+They all have Celery workers that handle saga steps and report results to Orchestrator.
+
+Results are sent as a Celery tasks, for example:
+```python
+@command_handlers_celery_app.task(bind=True, name=create_ticket_message.TASK_NAME)
+@saga_step_handler(response_queue=CREATE_ORDER_SAGA_RESPONSE_QUEUE)
+def create_ticket_task(self: Task, saga_id: int, payload: dict) -> dict:
+    request_data = create_ticket_message.Payload(**payload)
+
+    # in real world, we would create a ticket in restaurant service DB
+    # here, we will just generate some fake ID of just created ticket
+    ticket_id = random.randint(200, 300)
+    logging.info(f'Restaurant ticket {request_data} created')
+    logging.info(f'Ticket details: {payload}')
+
+    return asdict(create_ticket_message.Response(
+        ticket_id=ticket_id
+    ))
+```
+
+Here, `saga_step_handler` decorator sends payload (that our function returns) to `CREATE_ORDER_SAGA_RESPONSE_QUEUE`.
+
+> Response task names are computed based on initial task names (see `success_task_name` and `failure_task_name` functions).
+> For example, for "request" Celery task named `restaurant_service.create_ticket`, corresponding "response" Celery task (which will be handled by Orchestrator) will be named as `restaurant_service.create_ticket.response.success`
+
+See implemen
+
+
+## Orchestrator
+
+`order_service` worker, the heart of saga orchestration. 
+
+It listens to replies from Saga Handler Services and launches next saga step (or rolls back a saga if error occured). 
+
+Handling replies from Saga Handler Services is also implemented with Celery. Corresponding Celery are registered automatically with `CreateOrderSaga.register_async_step_handlers()`, see [`create_order_saga_worker.py` file](order_service/order_service/create_order_saga_worker.py)
+ 
 
 # Run
 Firstly, run all infrastructure 
@@ -31,7 +78,7 @@ docker-compose  --file docker-compose.local.yaml up
 To run each service, see `readme.md` files in each service folder. 
 
 # Implementation details
-## Common code, async messages and documentation  
+## AsyncAPI documentation  
 In REST, we have Swagger / OpenAPI.
 In async messaging, alternative is [AsyncAPI standard](https://www.asyncapi.com/) 
 which provides its own IDL (interface definition language) for describing messages between various services.
@@ -48,6 +95,8 @@ from typing import List
 
 import asyncapi
 
+from ...sagas_framework.asyncapi_utils import \
+    asyncapi_message_for_success_response
 
 TASK_NAME = 'restaurant_service.create_ticket'
 
@@ -58,7 +107,6 @@ class OrderItem:
     quantity: int
 
 
-# "request" schema
 @dataclasses.dataclass
 class Payload:
     order_id: int
@@ -66,7 +114,6 @@ class Payload:
     items: List[OrderItem]
 
 
-# "response" schema
 @dataclasses.dataclass
 class Response:
     ticket_id: int
@@ -81,43 +128,48 @@ message = asyncapi.Message(
     payload=Payload,
 )
 
-response = asyncapi.Message(
-    name=f'{TASK_NAME}.response',
-    title='Response is just created restaurant ticket ID',
-    payload=Response,
+success_response = asyncapi_message_for_success_response(
+    TASK_NAME,
+    title='Ticket ID is returned',
+    payload_dataclass=Response
 )
 ```
 
 These schemas are used to generate AsyncAPI specification, e.g., (see [restaurant_service/restaurant_service/asyncapi_specification.py](restaurant_service/restaurant_service/asyncapi_specification.py))
 ```python
+channels = dict([
+    message_to_channel(create_ticket_message.message,
+                       create_ticket_message.success_response),
+    message_to_channel(reject_ticket_message.message),  # compensation step has no resppnse
+    message_to_channel(approve_ticket_message.message,
+                       approve_ticket_message.success_response),
+])
+
 spec = asyncapi.Specification(
     info=asyncapi.Info(
         title='Restaurant service', version='1.0.0',
         description=f'Takes command messages from "{restaurant_service_messaging.COMMANDS_QUEUE}" queue',
     ),
-    channels=dict([
-        message_to_channel(create_ticket_message.message,
-                           create_ticket_message.response),
-        message_to_channel(reject_ticket_message.message),
-        message_to_channel(approve_ticket_message.message),
-    ]),
-    # all messages met in specification
-    components=asyncapi.Components(messages=dict([
-        message_to_component(create_ticket_message.message),
-        message_to_component(create_ticket_message.response),
-        message_to_component(reject_ticket_message.message),
-        message_to_component(approve_ticket_message.message)
-    ])),
-    servers={'development': asyncapi.Server(
-        url='localhost',
-        protocol=asyncapi.ProtocolType.REDIS,
-        description='Development Broker Server',
-    )},
+    channels=channels,
+    components=asyncapi_components_from_asyncapi_channels(channels.values()),
+    servers=fake_asyncapi_servers,
 )
+
+if __name__ == '__main__':
+    import yaml
+    from asyncapi.docs import spec_asjson
+
+    print(yaml.dump(spec_asjson(spec)))
 ```
 
-All such schemas are common for a service that sends, and a service that handles messages, that's why
-they're moved to `app_common` folder.
+## Common files
+Async messages sent between services are used by both orchestrator (`order_service`) and handler services ().
+
+So, messages are described in `app_common` folder that's shared between the services.
+
+> Ideally, there should be no common folder, but either sub-repository or, even better, 
+>  internal Python package with its own versioning.
+> However, in this demo project, we simply have shared folder
 
 ## Timeouts
 This example app uses request/asynchronous response interaction style, 

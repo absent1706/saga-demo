@@ -21,4 +21,4 @@ COPY ./app_common restaurant_service/app_common
 
 # command to run on container start
 ENV PYTHONPATH=.
-CMD ["./run_worker.sh"]
+CMD ["run_worker.sh"]

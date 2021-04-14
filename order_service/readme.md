@@ -18,6 +18,9 @@ PYTHONPATH=. python order_service/app.py
 
 
 # Run Celery worker (to listen for saga replies)
+This worker is the heart of saga orchestration.
+It runs Celery worker for the tasks that were registered automatically with `CreateOrderSaga.register_async_step_handlers()`
+
 ```
 ./run_worker.sh 
 ```
