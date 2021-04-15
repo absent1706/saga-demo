@@ -15,8 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 command_handlers_celery_app = Celery(
     'accounting_command_handlers',
-    broker=settings.CELERY_BROKER,
-    backend=settings.CELERY_RESULT_BACKEND)
+    broker=settings.CELERY_BROKER)
 command_handlers_celery_app.conf.task_default_queue = accounting_service_messaging.COMMANDS_QUEUE
 
 

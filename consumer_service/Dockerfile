@@ -16,9 +16,10 @@ RUN pipenv install --dev --system --deploy --ignore-pipfile
 RUN pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 
 # copy the content of the local src directory to the working directory
+COPY ./consumer_service/run_worker.sh .
 COPY ./consumer_service/consumer_service consumer_service
 COPY ./app_common consumer_service/app_common
 
 # command to run on container start
 ENV PYTHONPATH=.
-CMD ["run_worker.sh"]
+CMD ["bash", "./run_worker.sh"]

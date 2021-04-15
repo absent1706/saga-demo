@@ -9,10 +9,11 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
-  redis:
-    image: redis
-    ports:
-      - "6379:6379"
+  order_service_db:
+    image: postgres
+    environment:
+      POSTGRES_USER: some_user
+      POSTGRES_PASSWORD: some_password
   order_service:
     image: app_order_service
     build:
@@ -27,12 +28,19 @@ services:
       - PYTHONPATH=.
       - FLASK_DEBUG=1
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
     depends_on:
       - rabbit
-      - redis
     volumes:
       - ./order_service/order_service:/code/order_service
+  order_service_worker:
+    image: app_order_service
+    command: bash ./run_worker.sh
+    environment:
+      - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
+      - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
+    depends_on:
+      - order_service
   order_service_asyncapi_docs_server:
     image: app_order_service_asyncapi_docs_server
     build:
@@ -51,10 +59,8 @@ services:
     environment:
       - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - rabbit
-      - redis
   consumer_service_asyncapi_docs_server:
     image: app_consumer_service_asyncapi_docs_server
     build:
@@ -73,10 +79,8 @@ services:
     environment:
       - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - rabbit
-      - redis
   restaurant_service_asyncapi_docs_server:
     image: app_restaurant_service_asyncapi_docs_server
     build:
@@ -95,10 +99,8 @@ services:
     environment:
       - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       - rabbit
-      - redis
   accounting_service_asyncapi_docs_server:
     image: app_accounting_service_asyncapi_docs_server
     build:

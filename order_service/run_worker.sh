@@ -1,1 +1,1 @@
-PYTHONPATH=. pipenv run celery -A order_service.create_order_saga_worker worker --loglevel=INFO
+PYTHONPATH=. celery -A order_service.create_order_saga_worker worker --loglevel=INFO

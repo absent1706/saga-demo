@@ -9,3 +9,10 @@ services:
     ports:
       - "15672:15672"
       - "5672:5672"
+  order_service_db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: some_user
+      POSTGRES_PASSWORD: some_password
