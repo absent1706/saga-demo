@@ -29,7 +29,7 @@ main_celery_app = Celery('my_celery_app', broker=settings.CELERY_BROKER)
 app = Flask(__name__)
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('APP_SQLALCHEMY_DATABASE_URI'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('APP_SQLALCHEMY_DATABASE_URI',
                                                   f"sqlite:///{current_dir}/order_service.sqlite")
 
 db = SQLAlchemy(app, session_options={'autocommit': True})

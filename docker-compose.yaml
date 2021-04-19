@@ -11,6 +11,8 @@ services:
       - "5672:5672"
   order_service_db:
     image: postgres
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: some_user
       POSTGRES_PASSWORD: some_password
@@ -31,16 +33,21 @@ services:
       - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
     depends_on:
       - rabbit
+      - order_service_db
     volumes:
       - ./order_service/order_service:/code/order_service
   order_service_worker:
     image: app_order_service
-    command: bash ./run_worker.sh
+    command: celery -A order_service.create_order_saga_worker worker --loglevel=DEBUG
     environment:
+      - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
       - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
     depends_on:
       - order_service
+      - order_service_db
+    volumes:
+      - ./order_service/order_service:/code/order_service
   order_service_asyncapi_docs_server:
     image: app_order_service_asyncapi_docs_server
     build:
