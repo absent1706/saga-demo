@@ -3,16 +3,124 @@
 
 It's basically an implementation of CreateOrderSaga from [Chris Richardson book on Microservices](https://microservices.io/book)
 
-In repository, we have  
-and 3 other services with workers handling commands that `order_service` sends : `consumer_service`, `restaurant_service`, `accounting_service`.
+**Table of contents**:
+- [Running an app](#running-an-app)
+- [Local development](#local-development)
+- [Architecture](#architecture)
+  * [Interface / Launcher](#interface---launcher)
+  * [Saga Handler Services](#saga-handler-services)
+  * [Orchestrator](#orchestrator)
+- [Implementation details](#implementation-details)
+  * [AsyncAPI documentation](#asyncapi-documentation)
+  * [Common files](#common-files)
+
+
+# Running an app
+Firstly, run all infrastructure 
+```
+docker-compose up --build --remove-orphans
+```
+
+Then, you can visit next URLs:
+ * http://localhost:5000 - homepage with all links to run sagas.
+ * http://localhost:8081 - AsyncAPI docs for `order_service`
+ * http://localhost:8082 - AsyncAPI docs for `consumer_service`
+ * http://localhost:8083 - AsyncAPI docs for `restaurant_service`
+ * http://localhost:8084 - AsyncAPI docs for `accounting_service`
+
+
+# Local development
+Firstly, run RabbitMQ and Redis
+```
+docker-compose  --file docker-compose.local.yaml up 
+```
+
+To run each service, see `readme.md` files in each service folder. 
+
 
 # Architecture
-Whole ecosystem for this app includes:
+See more detailed architecture description at **TODO: insert a link to saga_framework**
+
+Anyways, let's describe an architecure of this app.
+
+Whole ecosystem for this app includes next main components
 
 ## Interface / Launcher 
 `order_service` Flask app which is the saga entrypoint needed just to initiate saga runs. 
 
-Initiating a saga means simply sending first Celery task to Saga Handler Service
+```python
+def _run_saga(input_data):
+    order = Order.create(**input_data)
+    saga_state = CreateOrderSagaState.create(order_id=order.id)
+    CreateOrderSaga(main_celery_app, saga_state.id).execute()
+    return f'Scheduled saga #{saga_state.id}. ' \
+           f'See its progress in order_service worker'
+```
+
+Here's saga definition 
+```python
+
+class CreateOrderSaga(StatefulSaga):
+    saga_state_repository = CreateOrderSagaRepository()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.steps = [
+            SyncStep(
+                name='reject_order',
+                compensation=self.reject_order
+            ),
+            
+            AsyncStep(
+                name='verify_consumer_details',
+                action=self.verify_consumer_details,
+
+                base_task_name=verify_consumer_details_message.TASK_NAME,
+                queue=consumer_service_messaging.COMMANDS_QUEUE,
+
+                on_success=self.verify_consumer_details_on_success,
+                on_failure=self.verify_consumer_details_on_failure
+            ),
+
+            AsyncStep(
+                name='create_restaurant_ticket',
+                action=self.create_restaurant_ticket,
+                compensation=self.reject_restaurant_ticket,
+
+                base_task_name=create_ticket_message.TASK_NAME,
+                queue=restaurant_service_messaging.COMMANDS_QUEUE,
+
+                on_success=self.create_restaurant_ticket_on_success,
+                on_failure=self.create_restaurant_ticket_on_failure
+            ),
+            # other steps ...
+        ]
+    
+    # method implementation goes next ...
+```
+
+Initiating a saga means simply sending first Celery task to Saga Handler Service:
+
+```python
+class CreateOrderSaga(StatefulSaga):
+    # other code ...
+    
+    def verify_consumer_details(self, current_step: AsyncStep):
+        logging.info(f'Verifying consumer #{self.saga_state.order.consumer_id} ...')
+
+        message_id = self.send_message_to_other_service(
+            current_step,
+            asdict(
+                verify_consumer_details_message.Payload(
+                    consumer_id=self.saga_state.order.consumer_id
+                )
+            )
+        )
+
+        self.saga_state_repository.update(self.saga_id, last_message_id=message_id)
+
+```
 
 
 ## Saga Handler Services 
@@ -43,39 +151,27 @@ Here, `saga_step_handler` decorator sends payload (that our function returns) to
 > Response task names are computed based on initial task names (see `success_task_name` and `failure_task_name` functions).
 > For example, for "request" Celery task named `restaurant_service.create_ticket`, corresponding "response" Celery task (which will be handled by Orchestrator) will be named as `restaurant_service.create_ticket.response.success`
 
-See implemen
-
-
 ## Orchestrator
 
 `order_service` worker, the heart of saga orchestration. 
 
-It listens to replies from Saga Handler Services and launches next saga step (or rolls back a saga if error occured). 
+It listens to replies from Saga Handler Services, does certain actions like
+```python
+    def create_restaurant_ticket_on_success(self, step: BaseStep, payload: dict):
+        response = create_ticket_message.Response(**payload)
+        logging.info(f'Restaurant ticket # {response.ticket_id} created')
 
-Handling replies from Saga Handler Services is also implemented with Celery. Corresponding Celery are registered automatically with `CreateOrderSaga.register_async_step_handlers()`, see [`create_order_saga_worker.py` file](order_service/order_service/create_order_saga_worker.py)
+        self.saga_state.order.update(restaurant_ticket_id=response.ticket_id)
+```
+
+, and launches next saga step (or rolls back a saga if error occured).
+
+See more details at **TODO: insert a link to saga_framework**
+
+Handling replies from Saga Handler Services is also implemented with Celery.
+Corresponding Celery are registered automatically with `CreateOrderSaga.register_async_step_handlers()`, 
+see [`create_order_saga_worker.py` file](order_service/order_service/create_order_saga_worker.py)
  
-
-# Run
-Firstly, run all infrastructure 
-```
-docker-compose up --build --remove-orphans
-```
-
-Then, you can visit next URLs:
- * http://localhost:5000 - homepage with all links to run sagas.
- * http://localhost:8081 - AsyncAPI docs for `order_service`
- * http://localhost:8082 - AsyncAPI docs for `consumer_service`
- * http://localhost:8083 - AsyncAPI docs for `restaurant_service`
- * http://localhost:8084 - AsyncAPI docs for `accounting_service`
-
-
-# Local development
-Firstly, run RabbitMQ and Redis
-```
-docker-compose  --file docker-compose.local.yaml up 
-```
-
-To run each service, see `readme.md` files in each service folder. 
 
 # Implementation details
 ## AsyncAPI documentation  
@@ -170,40 +266,3 @@ So, messages are described in `app_common` folder that's shared between the serv
 > Ideally, there should be no common folder, but either sub-repository or, even better, 
 >  internal Python package with its own versioning.
 > However, in this demo project, we simply have shared folder
-
-## Timeouts
-This example app uses request/asynchronous response interaction style, 
-i.e. it firstly sends "command" message to message broker (RabbitMQ), 
-then waits for the response for some period of time. 
-If response isn't returned, exception is raised.
-
-Because we're in Python world, we have Celery which cares about all implementation, 
-so end code looks like (see [order_service/order_service/app.py](order_service/order_service/app.py)):
-
-```python
-def create_restaurant_ticket(self):
-    logging.info('Sending "create restaurant ticket" command ...')
-    task_result = celery_app.send_task(
-        create_ticket_message.TASK_NAME,
-        args=[asdict(
-            create_ticket_message.Payload(
-                order_id=self.order.id,
-                customer_id=self.order.consumer_id,
-                items=[
-                    create_ticket_message.OrderItem(
-                        name=item.name,
-                        quantity=item.quantity
-                    )
-                    for item in self.order.items
-                ]
-            )
-        )],
-        queue=restaurant_service_messaging.COMMANDS_QUEUE)
-
-    self.saga_state.update(status=CreateOrderSagaStatuses.CREATING_RESTAURANT_TICKET,
-                           last_message_id=task_result.id)
-
-    response = create_ticket_message.Response(**task_result.get(timeout=self.TIMEOUT))
-    logging.info(f'Restaurant ticket # {response.ticket_id} created')
-    self.order.update(restaurant_ticket_id=response.ticket_id)
-```
