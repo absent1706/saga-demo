@@ -1,15 +1,9 @@
-import logging
-
-from app_common.sagas_framework import \
-    close_sqlalchemy_db_connection_after_celery_task_ends
-
-logging.basicConfig(level=logging.DEBUG)
-
 from celery import Celery
 
 from order_service.app_common import settings
 from order_service.app_common.messaging import CREATE_ORDER_SAGA_RESPONSE_QUEUE
-
+from order_service.app_common.sagas_framework import \
+    close_sqlalchemy_db_connection_after_celery_task_ends
 from .app import CreateOrderSaga, db
 
 create_order_saga_responses_celery_app = Celery(
