@@ -3,13 +3,13 @@ import random
 from dataclasses import asdict
 
 from celery import Celery, Task
+from saga_framework import saga_step_handler
 
 from accounting_service.app_common import settings
 from accounting_service.app_common.messaging import \
     accounting_service_messaging, CREATE_ORDER_SAGA_RESPONSE_QUEUE
 from accounting_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
-from accounting_service.app_common.sagas_framework import saga_step_handler
 
 logging.basicConfig(level=logging.DEBUG)
 

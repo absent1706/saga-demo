@@ -1,11 +1,11 @@
 import asyncapi
+from saga_framework.asyncapi_utils import \
+    message_to_channel, fake_asyncapi_servers, \
+    asyncapi_components_from_asyncapi_channels
 
 from accounting_service.app_common.messaging import accounting_service_messaging
 from accounting_service.app_common.messaging.accounting_service_messaging import \
     authorize_card_message
-from accounting_service.app_common.sagas_framework.asyncapi_utils import \
-    message_to_channel, fake_asyncapi_servers, \
-    asyncapi_components_from_asyncapi_channels
 
 """
 IMPORTANT!

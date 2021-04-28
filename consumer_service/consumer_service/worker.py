@@ -1,15 +1,14 @@
 import logging
-from dataclasses import asdict
-
 import typing
+
 from celery import Celery, Task
+from saga_framework import saga_step_handler
 
 from consumer_service.app_common import settings
-from consumer_service.app_common.messaging.consumer_service_messaging import \
-    verify_consumer_details_message
 from consumer_service.app_common.messaging import consumer_service_messaging, \
     CREATE_ORDER_SAGA_RESPONSE_QUEUE
-from consumer_service.app_common.sagas_framework import saga_step_handler
+from consumer_service.app_common.messaging.consumer_service_messaging import \
+    verify_consumer_details_message
 
 logging.basicConfig(level=logging.DEBUG)
 

@@ -1,11 +1,11 @@
 import asyncapi
+from saga_framework.asyncapi_utils import \
+    message_to_channel, fake_asyncapi_servers, \
+    asyncapi_components_from_asyncapi_channels
 
 from restaurant_service.app_common.messaging import restaurant_service_messaging
 from restaurant_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from restaurant_service.app_common.sagas_framework.asyncapi_utils import \
-    message_to_channel, fake_asyncapi_servers, \
-    asyncapi_components_from_asyncapi_channels
 
 """
 IMPORTANT!

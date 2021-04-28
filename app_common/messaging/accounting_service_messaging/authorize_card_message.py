@@ -1,9 +1,7 @@
 import dataclasses
 
 import asyncapi
-
-from ...sagas_framework.asyncapi_utils import \
-    asyncapi_message_for_success_response
+from saga_framework.asyncapi_utils import asyncapi_message_for_success_response
 
 TASK_NAME = 'accounting_service.authorize_card'
 

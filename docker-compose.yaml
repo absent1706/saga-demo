@@ -30,7 +30,7 @@ services:
       - PYTHONPATH=.
       - FLASK_DEBUG=1
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
+      - APP_SQLALCHEMY_DATABASE_URI=postgresql://some_user:some_password@order_service_db:5432/postgres
     depends_on:
       - rabbit
       - order_service_db
@@ -42,7 +42,7 @@ services:
     environment:
       - PYTHONPATH=.
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
-      - APP_SQLALCHEMY_DATABASE_URI=postgresql+psycopg2://some_user:some_password@order_service_db:5432/postgres
+      - APP_SQLALCHEMY_DATABASE_URI=postgresql://some_user:some_password@order_service_db:5432/postgres
     depends_on:
       - order_service
       - order_service_db

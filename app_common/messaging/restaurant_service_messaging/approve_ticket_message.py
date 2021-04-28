@@ -1,7 +1,7 @@
 import dataclasses
-import asyncapi
-from ...sagas_framework.asyncapi_utils import asyncapi_message_for_success_response
 
+import asyncapi
+from saga_framework.asyncapi_utils import asyncapi_message_for_success_response
 
 TASK_NAME = 'restaurant_service.approve_ticket'
 

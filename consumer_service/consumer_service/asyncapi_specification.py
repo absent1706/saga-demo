@@ -1,11 +1,11 @@
 import asyncapi
+from saga_framework.asyncapi_utils import \
+    fake_asyncapi_servers, \
+    message_to_channel, asyncapi_components_from_asyncapi_channels
 
 from consumer_service.app_common.messaging import consumer_service_messaging
 from consumer_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
-from consumer_service.app_common.sagas_framework.asyncapi_utils import \
-    fake_asyncapi_servers, \
-    message_to_channel, asyncapi_components_from_asyncapi_channels
 
 """
 IMPORTANT!

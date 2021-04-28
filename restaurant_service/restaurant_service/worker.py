@@ -4,6 +4,8 @@ import typing
 from dataclasses import asdict
 
 from celery import Celery, Task
+from saga_framework import saga_step_handler, no_response_saga_step_handler
+from saga_framework.celery_utils import auto_retry_then_reraise
 
 from restaurant_service.app_common import settings
 from restaurant_service.app_common.messaging import \
@@ -11,9 +13,6 @@ from restaurant_service.app_common.messaging import \
     CREATE_ORDER_SAGA_RESPONSE_QUEUE
 from restaurant_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from restaurant_service.app_common.sagas_framework import \
-    saga_step_handler, no_response_saga_step_handler, \
-    auto_retry_then_reraise
 
 logging.basicConfig(level=logging.DEBUG)
 

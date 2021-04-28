@@ -15,6 +15,9 @@ COPY ./consumer_service/Pipfile* ./
 RUN pipenv install --dev --system --deploy --ignore-pipfile
 RUN pip install 'asyncapi[http,yaml,redis,subscriber,docs]'
 
+COPY ./saga_framework-0.1-py3-none-any.whl ./
+RUN pip install saga_framework-0.1-py3-none-any.whl
+
 # copy the content of the local src directory to the working directory
 COPY ./consumer_service/run_worker.sh .
 COPY ./consumer_service/consumer_service consumer_service

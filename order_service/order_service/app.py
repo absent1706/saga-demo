@@ -8,6 +8,8 @@ from dataclasses import asdict
 from celery import Celery
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from saga_framework import SyncStep, \
+    AsyncStep, BaseStep, AbstractSagaStateRepository, StatefulSaga
 from sqlalchemy_mixins import AllFeaturesMixin, TimestampsMixin
 
 from order_service.app_common import settings
@@ -19,8 +21,6 @@ from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from order_service.app_common.sagas_framework import SyncStep, \
-    AsyncStep, BaseStep, AbstractSagaStateRepository, StatefulSaga
 
 logging.basicConfig(level=logging.DEBUG)
 

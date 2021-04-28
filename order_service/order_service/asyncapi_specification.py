@@ -1,6 +1,9 @@
 from functools import partial
 
 import asyncapi
+from saga_framework.asyncapi_utils import \
+    message_to_channel, \
+    fake_asyncapi_servers, asyncapi_components_from_asyncapi_channels
 
 from order_service.app_common.messaging import consumer_service_messaging, \
     accounting_service_messaging
@@ -10,9 +13,6 @@ from order_service.app_common.messaging.consumer_service_messaging import \
     verify_consumer_details_message
 from order_service.app_common.messaging.restaurant_service_messaging import \
     create_ticket_message, reject_ticket_message, approve_ticket_message
-from order_service.app_common.sagas_framework.asyncapi_utils import \
-    message_to_channel, \
-    fake_asyncapi_servers, asyncapi_components_from_asyncapi_channels
 
 """
 IMPORTANT!
