@@ -116,7 +116,9 @@ QUANTITY_THAT_WILL_MAKE_ORCHESTRATOR_FAIL = 100500
 def _run_saga(input_data):
     order = Order.create(**input_data)
     saga_state = CreateOrderSagaState.create(order_id=order.id)
-    CreateOrderSaga(main_celery_app, saga_state.id).execute()
+    saga_state_repository = CreateOrderSagaRepository()
+
+    CreateOrderSaga(saga_state_repository, main_celery_app, saga_state.id).execute()
     return f'Scheduled saga #{saga_state.id}. ' \
            f'See its progress in order_service worker'
 
@@ -216,8 +218,6 @@ class CreateOrderSagaRepository(AbstractSagaStateRepository):
 
 
 class CreateOrderSaga(StatefulSaga):
-    saga_state_repository = CreateOrderSagaRepository()
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
