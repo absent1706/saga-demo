@@ -48,14 +48,6 @@ services:
       - order_service_db
     volumes:
       - ./order_service/order_service:/code/order_service
-  order_service_asyncapi_docs_server:
-    image: app_order_service_asyncapi_docs_server
-    build:
-      context: ./order_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8081:8080"
   consumer_service_worker:
     image: app_consumer_service_worker
     build:
@@ -68,14 +60,6 @@ services:
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
     depends_on:
       - rabbit
-  consumer_service_asyncapi_docs_server:
-    image: app_consumer_service_asyncapi_docs_server
-    build:
-      context: ./consumer_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8082:8080"
   restaurant_service_worker:
     image: app_restaurant_service_worker
     build:
@@ -88,14 +72,6 @@ services:
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
     depends_on:
       - rabbit
-  restaurant_service_asyncapi_docs_server:
-    image: app_restaurant_service_asyncapi_docs_server
-    build:
-      context: ./restaurant_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8083:8080"
   accounting_service_worker:
     image: app_accounting_service_worker
     build:
@@ -108,6 +84,23 @@ services:
       - CELERY_BROKER=pyamqp://rabbitmq:rabbitmq@rabbit//
     depends_on:
       - rabbit
+
+  order_service_asyncapi_docs_server:
+    image: app_order_service_asyncapi_docs_server
+    build:
+      context: ./order_service
+      dockerfile: asyncapi_docs_server.Dockerfile
+    command: http-server ./asyncapi_html
+    ports:
+      - "8081:8080"
+  consumer_service_asyncapi_docs_server:
+    image: app_consumer_service_asyncapi_docs_server
+    build:
+      context: ./consumer_service
+      dockerfile: asyncapi_docs_server.Dockerfile
+    command: http-server ./asyncapi_html
+    ports:
+      - "8082:8080"
   accounting_service_asyncapi_docs_server:
     image: app_accounting_service_asyncapi_docs_server
     build:
@@ -116,3 +109,11 @@ services:
     command: http-server ./asyncapi_html
     ports:
       - "8084:8080"
+  restaurant_service_asyncapi_docs_server:
+    image: app_restaurant_service_asyncapi_docs_server
+    build:
+      context: ./restaurant_service
+      dockerfile: asyncapi_docs_server.Dockerfile
+    command: http-server ./asyncapi_html
+    ports:
+      - "8083:8080"
