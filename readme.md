@@ -10,7 +10,7 @@ that shows how latter can be used to implement CreateOrderSaga from [Chris Richa
 - [Architecture](#architecture)
   * [Orchestrator web app](#orchestrator-web-app)
   * [Saga Step Handler Services](#saga-step-handler-services)
-  * [Orchestrator](#orchestrator)
+  * [Orchestrator worker](#orchestrator-worker)
 - [Implementation details](#implementation-details)
   * [AsyncAPI documentation](#asyncapi-documentation)
   * [Common files](#common-files)
@@ -153,22 +153,22 @@ Here, `saga_step_handler` decorator sends payload (that our function returns) to
 > Response task names are computed based on initial task names (see `success_task_name` and `failure_task_name` functions).
 > For example, for "request" Celery task named `restaurant_service.create_ticket`, corresponding "response" Celery task (which will be handled by Orchestrator) will be named as `restaurant_service.create_ticket.response.success`
 
-## Orchestrator 
+## Orchestrator worker
 
-`order_service` worker, the heart of saga orchestration. 
+It's an `order_service` worker, the heart of saga orchestration. 
 
 It listens to replies from Saga Handler Services, does certain actions like
 ```python
-    def create_restaurant_ticket_on_success(self, step: BaseStep, payload: dict):
-        response = create_ticket_message.Response(**payload)
-        logging.info(f'Restaurant ticket # {response.ticket_id} created')
+def create_restaurant_ticket_on_success(self, step: BaseStep, payload: dict):
+    response = create_ticket_message.Response(**payload)
+    logging.info(f'Restaurant ticket # {response.ticket_id} created')
 
-        self.saga_state.order.update(restaurant_ticket_id=response.ticket_id)
+    self.saga_state.order.update(restaurant_ticket_id=response.ticket_id)
 ```
 
-, and launches next saga step (or rolls back a saga if error occured).
+and launches next saga step (or rolls back a saga if error occured).
 
-See more details at **TODO: insert a link to saga_framework**
+See more details at [https://github.com/absent1706/saga-framework](https://github.com/absent1706/saga-framework)
 
 Handling replies from Saga Handler Services is also implemented with Celery.
 Corresponding Celery are registered automatically with `CreateOrderSaga.register_async_step_handlers()`, 
