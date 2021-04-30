@@ -85,35 +85,35 @@ services:
     depends_on:
       - rabbit
 
-  order_service_asyncapi_docs_server:
-    image: app_order_service_asyncapi_docs_server
-    build:
-      context: ./order_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8081:8080"
-  consumer_service_asyncapi_docs_server:
-    image: app_consumer_service_asyncapi_docs_server
-    build:
-      context: ./consumer_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8082:8080"
-  accounting_service_asyncapi_docs_server:
-    image: app_accounting_service_asyncapi_docs_server
-    build:
-      context: ./accounting_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8084:8080"
-  restaurant_service_asyncapi_docs_server:
-    image: app_restaurant_service_asyncapi_docs_server
-    build:
-      context: ./restaurant_service
-      dockerfile: asyncapi_docs_server.Dockerfile
-    command: http-server ./asyncapi_html
-    ports:
-      - "8083:8080"
+#  order_service_asyncapi_docs_server:
+#    image: app_order_service_asyncapi_docs_server
+#    build:
+#      context: ./order_service
+#      dockerfile: asyncapi_docs_server.Dockerfile
+#    command: http-server ./asyncapi_html
+#    ports:
+#      - "8081:8080"
+#  consumer_service_asyncapi_docs_server:
+#    image: app_consumer_service_asyncapi_docs_server
+#    build:
+#      context: ./consumer_service
+#      dockerfile: asyncapi_docs_server.Dockerfile
+#    command: http-server ./asyncapi_html
+#    ports:
+#      - "8082:8080"
+#  accounting_service_asyncapi_docs_server:
+#    image: app_accounting_service_asyncapi_docs_server
+#    build:
+#      context: ./accounting_service
+#      dockerfile: asyncapi_docs_server.Dockerfile
+#    command: http-server ./asyncapi_html
+#    ports:
+#      - "8084:8080"
+#  restaurant_service_asyncapi_docs_server:
+#    image: app_restaurant_service_asyncapi_docs_server
+#    build:
+#      context: ./restaurant_service
+#      dockerfile: asyncapi_docs_server.Dockerfile
+#    command: http-server ./asyncapi_html
+#    ports:
+#      - "8083:8080"

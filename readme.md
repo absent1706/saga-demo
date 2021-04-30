@@ -1,19 +1,19 @@
 
 # Saga pattern for microservices example
 
-It's basically an implementation of CreateOrderSaga from [Chris Richardson book on Microservices](https://microservices.io/book)
+It's a demo application for [saga-framework](https://github.com/absent1706/saga-framework)
+that shows how latter can be used to implement CreateOrderSaga from [Chris Richardson book on Microservices](https://microservices.io/book).
 
 **Table of contents**:
 - [Running an app](#running-an-app)
 - [Local development](#local-development)
 - [Architecture](#architecture)
-  * [Interface / Launcher](#interface---launcher)
-  * [Saga Handler Services](#saga-handler-services)
+  * [Orchestrator web app](#orchestrator-web-app)
+  * [Saga Step Handler Services](#saga-step-handler-services)
   * [Orchestrator](#orchestrator)
 - [Implementation details](#implementation-details)
   * [AsyncAPI documentation](#asyncapi-documentation)
   * [Common files](#common-files)
-
 
 # Running an app
 Firstly, run all infrastructure 
@@ -39,13 +39,15 @@ To run each service, see `readme.md` files in each service folder.
 
 
 # Architecture
-See more detailed architecture description at **TODO: insert a link to saga_framework**
+For unpatient readers: here's an illustration of how first two steps of Create Order Saga work.
+![create-order-saga-first-2-steps-explained](readme-media/create-order-saga-first-2-steps-explained.png)
 
-Anyways, let's describe an architecure of this app.
+See more detailed Saga pattern description at [https://github.com/absent1706/saga-framework](https://github.com/absent1706/saga-framework)
 
+Let's now describe current application in more details.
 Whole ecosystem for this app includes next main components
 
-## Interface / Launcher 
+## Orchestrator web app 
 `order_service` Flask app which is the saga entrypoint needed just to initiate saga runs. 
 
 ```python
@@ -123,7 +125,7 @@ class CreateOrderSaga(StatefulSaga):
 ```
 
 
-## Saga Handler Services 
+## Saga Step Handler Services 
 `consumer_service`, `restaurant_service`, `accounting_service`. 
 
 They all have Celery workers that handle saga steps and report results to Orchestrator.
@@ -151,7 +153,7 @@ Here, `saga_step_handler` decorator sends payload (that our function returns) to
 > Response task names are computed based on initial task names (see `success_task_name` and `failure_task_name` functions).
 > For example, for "request" Celery task named `restaurant_service.create_ticket`, corresponding "response" Celery task (which will be handled by Orchestrator) will be named as `restaurant_service.create_ticket.response.success`
 
-## Orchestrator
+## Orchestrator 
 
 `order_service` worker, the heart of saga orchestration. 
 
