@@ -39,7 +39,12 @@ To run each service, see `readme.md` files in each service folder.
 
 
 # Architecture
-For unpatient readers: here's an illustration of how first two steps of Create Order Saga work.
+
+## TL;DR
+For unpatient readers: here's all main solution components 
+![saga-deployment-diagram](readme-media/saga-deployment-diagram.png)
+
+Also, here's how first two steps of Create Order Saga work.
 ![create-order-saga-first-2-steps-explained](readme-media/create-order-saga-first-2-steps-explained.png)
 
 See more detailed Saga pattern description at [https://github.com/absent1706/saga-framework](https://github.com/absent1706/saga-framework)
