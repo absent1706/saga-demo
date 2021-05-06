@@ -8,7 +8,7 @@ that shows how latter can be used to implement CreateOrderSaga from [Chris Richa
 - [Running an app](#running-an-app)
 - [Local development](#local-development)
 - [Architecture](#architecture)
-  * [Orchestrator web app](#orchestrator-web-app)
+  * [Orchestrator entrypoint](#orchestrator-entrypoint)
   * [Saga Step Handler Services](#saga-step-handler-services)
   * [Orchestrator worker](#orchestrator-worker)
 - [Implementation details](#implementation-details)
@@ -52,7 +52,7 @@ See more detailed Saga pattern description at [https://github.com/absent1706/sag
 Let's now describe current application in more details.
 Whole ecosystem for this app includes next main components
 
-## Orchestrator web app 
+## Orchestrator entrypoint 
 `order_service` Flask app which is the saga entrypoint needed just to initiate saga runs. 
 
 ```python
