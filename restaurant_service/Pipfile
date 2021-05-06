@@ -5,7 +5,8 @@ name = "pypi"
 
 [packages]
 celery = "*"
-asyncapi = {extras = ["docs", "http", "redis", "subscriber", "yaml"], version = "*"}
+# saga-framework = "*"
+# asyncapi[http,yaml,redis,subscriber,docs]
 
 [dev-packages]
 

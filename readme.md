@@ -38,7 +38,7 @@ docker-compose  --file docker-compose.local.yaml up
 To run each service, see `readme.md` files in each service folder. 
 
 
-# Architecture
+# Architecture and implementation details
 
 ## TL;DR
 For unpatient readers: here's all main solution components 
@@ -179,8 +179,6 @@ Handling replies from Saga Handler Services is also implemented with Celery.
 Corresponding Celery are registered automatically with `CreateOrderSaga.register_async_step_handlers()`, 
 see [`create_order_saga_worker.py` file](order_service/order_service/create_order_saga_worker.py)
  
-
-# Implementation details
 ## AsyncAPI documentation  
 In REST, we have Swagger / OpenAPI.
 In async messaging, alternative is [AsyncAPI standard](https://www.asyncapi.com/) 
@@ -198,7 +196,7 @@ from typing import List
 
 import asyncapi
 
-from ...sagas_framework.asyncapi_utils import \
+from saga_framework.asyncapi_utils import \
     asyncapi_message_for_success_response
 
 TASK_NAME = 'restaurant_service.create_ticket'

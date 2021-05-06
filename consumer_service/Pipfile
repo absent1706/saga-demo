@@ -7,6 +7,8 @@ name = "pypi"
 celery = "*"
 sqlalchemy = "*"
 psycopg2-binary = "*"
+# saga-framework = "*"
+# asyncapi[http,yaml,redis,subscriber,docs]
 
 [dev-packages]
 

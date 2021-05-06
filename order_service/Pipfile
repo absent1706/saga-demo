@@ -6,11 +6,12 @@ name = "pypi"
 [packages]
 celery = "*"
 flask = "*"
-
 sqlalchemy = "*"
 psycopg2-binary = "*"
 flask-sqlalchemy = "*"
 sqlalchemy-mixins = "*"
+# saga-framework = "*"
+# asyncapi[http,yaml,redis,subscriber,docs]
 
 [requires]
 python_version = "3.8"
