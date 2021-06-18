@@ -1,5 +1,4 @@
 .idea/
-Pipfile.lock
 *.sqlite
 venv/
 __pychache__
