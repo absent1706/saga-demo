@@ -34,8 +34,6 @@ services:
     depends_on:
       - rabbit
       - order_service_db
-    volumes:
-      - ./order_service/order_service:/code/order_service
   order_service_worker:
     image: app_order_service
     command: celery -A order_service.create_order_saga_worker worker --loglevel=DEBUG
@@ -46,8 +44,6 @@ services:
     depends_on:
       - order_service
       - order_service_db
-    volumes:
-      - ./order_service/order_service:/code/order_service
   consumer_service_worker:
     image: app_consumer_service_worker
     build:
